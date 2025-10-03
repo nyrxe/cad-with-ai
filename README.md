@@ -1,8 +1,8 @@
-# CAD with AI - Voxelizer
+# CAD with AI - Voxelizer part
 
-A powerful PLY to voxel pipeline with color propagation for CAD models. Process multiple files with organized batch processing.
+An PLY file model to voxel pipeline with color propagation for CAD models. Process multiple files with organized batch processing.
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### 1. Setup
 ```bash
@@ -42,26 +42,26 @@ Each PLY file gets its own organized output folder:
 
 ```
 voxel_out/
-├── model1/                    # Folder for model1.ply
-│   ├── voxels_filled_colored_boxes.ply    # 🎨 Colored voxel mesh
-│   ├── voxels_filled_colored_points.ply   # 🎨 Colored point cloud
-│   ├── vox_filled_boxes.ply              # Uncolored filled voxels
-│   ├── vox_surface_boxes.ply             # Surface voxels only
-│   └── vox_occupancy_sparse.npz          # Raw voxel data
-└── model2/                    # Folder for model2.ply
-    └── ... (same structure)
+    model1/                    # Folder for model1.ply
+     -- voxels_filled_colored_boxes.ply    # Colored voxel mesh
+     -- voxels_filled_colored_points.ply   # Colored point cloud
+     -- vox_filled_boxes.ply              # Uncolored filled voxels
+     -- vox_surface_boxes.ply             # Surface voxels only
+     -- vox_occupancy_sparse.npz          # Raw voxel data
+   model2/                    # Folder for model2.ply
+     ... 
 ```
 
-## 🎯 Features
+##  Features
 
-- **✅ Batch Processing** - Process multiple PLY files at once
-- **✅ Color Propagation** - Preserves original mesh colors in voxels
-- **✅ Organized Output** - Each file gets its own folder
-- **✅ Multiple Formats** - Box meshes, point clouds, raw data
-- **✅ Surface & Filled** - Both surface and interior voxels
-- **✅ Memory Efficient** - Chunked processing for large models
+- **Batch Processing** - Process multiple PLY files at once
+- **Color Propagation** - Preserves original mesh colors in voxels
+- **Organized Output** - Each file gets its own folder
+- **Multiple Formats** - Box meshes, point clouds, raw data
+- **Surface & Filled** - Both surface and interior voxels
+- **Memory Efficient** - Chunked processing for large models
 
-## 📋 Requirements
+## Requirements
 
 - Python 3.8+
 - trimesh
@@ -85,33 +85,31 @@ cp *.ply input/
 python voxelize_local.py
 ```
 
-## 📊 Output Files Explained
+##  Output Files Explained
 
-| File | Description |
-|------|-------------|
-| `voxels_filled_colored_boxes.ply` | **Main result** - Colored voxel mesh (view in MeshLab) |
-| `voxels_filled_colored_points.ply` | Colored point cloud of voxel centers |
-| `vox_filled_boxes.ply` | Uncolored filled voxel mesh |
-| `vox_surface_boxes.ply` | Surface voxels only |
-| `vox_occupancy_sparse.npz` | Raw voxel data with positions and transform |
 
-## 🎨 Viewing Results
+`voxels_filled_colored_boxes.ply`  **Main result** - Colored voxel mesh (view in MeshLab) 
+`voxels_filled_colored_points.ply`  Colored point cloud of voxel centers |
+`vox_filled_boxes.ply`  Uncolored filled voxel mesh |
+`vox_surface_boxes.ply` Surface voxels only |
+`vox_occupancy_sparse.npz`  Raw voxel data with positions and transform |
+
+## Viewing Results
 
 Open `voxels_filled_colored_boxes.ply` in:
-- **MeshLab** (recommended)
-- **Blender**
-- **Any 3D viewer**
+- **MeshLab** (recommended)..
 
-## ⚙️ Technical Details
+
+##  Technical Details
 
 - **Resolution**: 128 voxels along longest axis (configurable)
 - **Color Propagation**: Uses proximity queries to map face colors to voxels
 - **Memory Safe**: Processes large models in chunks
 - **Watertight Support**: Works with both open and closed meshes
 
-## 🐛 Troubleshooting
+##  Troubleshooting
 
-**No PLY files found?**
+**No PLY files found**
 - Make sure files are in `input/` folder
 - Check file extensions are `.ply`
 
@@ -119,10 +117,10 @@ Open `voxels_filled_colored_boxes.ply` in:
 - Reduce target resolution in code
 - Process files one at a time
 
-**Colors not showing?**
+**Colors not showing**
 - Ensure your PLY files have face colors
 - Check mesh has proper color data
 
-## 📝 License
+##License
 
-This project is open source. Feel free to use and modify for your CAD with AI projects!
+This project is open source.
