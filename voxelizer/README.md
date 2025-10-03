@@ -24,5 +24,5 @@ pip install -r requirements.txt
 python voxelize.py \
 --input path/to/model.ply \
 --outdir voxel_out \
---target-res 128 \
---fill # remove this flag to export surface-only
+--target-res 128 \ # more makes it hard to run on bad pc
+--fill # remove this flag to export surface-only and you dont want volume
