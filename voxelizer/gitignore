@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc #cached for faster startup
+*.pyo 
+*.pyd
+
+
+# venvs
+.venv/ #we have requirements instead
+venv/
+
+
+# VS Code
+.vscode/ #vs code settings
+
+
+# Outputs
+voxel_out/
+*.npz
+*.ply
+
+
+# OS
+.DS_Store
+Thumbs.db
