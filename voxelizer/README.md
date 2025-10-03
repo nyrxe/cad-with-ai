@@ -26,3 +26,11 @@ python voxelize.py \
 --outdir voxel_out \
 --target-res 128 \ # more makes it hard to run on bad pc
 --fill # remove this flag to export surface-only and you dont want volume
+
+Dev notes
+
+This pipeline does not require watertight meshes for surface voxels; filled voxels use trimesh's fill().
+
+Per-face color propagation uses trimesh.proximity.ProximityQuery.on_surface (requires rtree). If colors are missing, colored outputs are skipped. 
+
+The NPZ stores the index→world affine transform; to get voxel centers in world space, apply it to [i,j,k,1]^T.
