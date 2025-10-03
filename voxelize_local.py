@@ -2,6 +2,7 @@
 """
 Local PLY to Voxel Pipeline
 Adapted from the working Colab code
+Processes multiple PLY files from input/ folder and creates separate output folders
 """
 
 import trimesh
@@ -10,23 +11,17 @@ import os
 import glob
 from trimesh.proximity import ProximityQuery
 
-def main():
-    # Find PLY files in current directory
-    DATA_DIR = "."
-    print("Files in current directory:", os.listdir(DATA_DIR))
+def process_single_ply(ply_path, output_base_dir="voxel_out"):
+    """Process a single PLY file and create its own output folder"""
+    # Get filename without extension for folder name
+    base_name = os.path.splitext(os.path.basename(ply_path))[0]
+    out_dir = os.path.join(output_base_dir, base_name)
     
-    ply_files = sorted(glob.glob(os.path.join(DATA_DIR, "*.ply")))
-    if not ply_files:
-        print("No .ply found — make sure you have a .ply file in the current directory!")
-        return
-    print("Found .ply files:", ply_files)
-    
-    # Use the first PLY file
-    PLY_PATH = ply_files[0]
-    print(f"Processing: {PLY_PATH}")
+    print(f"\n=== Processing: {ply_path} ===")
+    print(f"Output folder: {out_dir}")
     
     # Load mesh
-    mesh = trimesh.load(PLY_PATH, process=False)  # keep face colors as-is
+    mesh = trimesh.load(ply_path, process=False)  # keep face colors as-is
     
     print("verts:", len(mesh.vertices))
     print("faces:", len(mesh.faces))
@@ -59,7 +54,6 @@ def main():
     print("filled  voxels:", len(vg_filled.sparse_indices))
     
     # Create output directory
-    out_dir = "voxel_out"
     os.makedirs(out_dir, exist_ok=True)
     
     # Save as box-meshes (handy for quick preview in any mesh viewer)
@@ -152,13 +146,52 @@ def main():
             boxes.export(fallback_ply)
             print("saved:", fallback_ply, "(uncolored)")
     
-    print(f"\n=== COMPLETE ===")
+    print(f"\n=== COMPLETE for {base_name} ===")
     print(f"All outputs saved to: {out_dir}/")
     print("Files created:")
     for file in os.listdir(out_dir):
         file_path = os.path.join(out_dir, file)
         size = os.path.getsize(file_path)
         print(f"  - {file} ({size:,} bytes)")
+    
+    return out_dir
+
+def main():
+    # Find PLY files in input directory
+    INPUT_DIR = "input"
+    OUTPUT_BASE_DIR = "voxel_out"
+    
+    # Create input directory if it doesn't exist
+    if not os.path.exists(INPUT_DIR):
+        os.makedirs(INPUT_DIR)
+        print(f"Created {INPUT_DIR} directory. Please add your .ply files there.")
+        return
+    
+    print(f"Looking for PLY files in: {INPUT_DIR}")
+    print("Files in input directory:", os.listdir(INPUT_DIR))
+    
+    ply_files = sorted(glob.glob(os.path.join(INPUT_DIR, "*.ply")))
+    if not ply_files:
+        print(f"No .ply files found in {INPUT_DIR} directory!")
+        print("Please add your .ply files to the 'input' folder.")
+        return
+    
+    print(f"Found {len(ply_files)} PLY files:", [os.path.basename(f) for f in ply_files])
+    
+    # Process each PLY file
+    processed_dirs = []
+    for ply_path in ply_files:
+        try:
+            output_dir = process_single_ply(ply_path, OUTPUT_BASE_DIR)
+            processed_dirs.append(output_dir)
+        except Exception as e:
+            print(f"Error processing {ply_path}: {e}")
+            continue
+    
+    print(f"\n*** PROCESSING COMPLETE! ***")
+    print(f"Processed {len(processed_dirs)} files successfully:")
+    for dir_path in processed_dirs:
+        print(f"  - {dir_path}")
 
 if __name__ == "__main__":
     main()
