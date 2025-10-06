@@ -36,6 +36,15 @@ mkdir input
 python voxelize_local.py
 ```
 
+### 4. Run FEA Analysis (Optional)
+```bash
+# Install CalculiX first (see below)
+python install_calculix.py  # Check CalculiX installation
+
+# Run FEA analysis on voxelized models
+python voxel_fea_analysis.py
+```
+
 ## 📁 Output Structure
 
 Each PLY file gets its own organized output folder:
@@ -47,7 +56,15 @@ voxel_out/
 │   ├── voxels_filled_colored_points.ply   # 🎨 Colored point cloud
 │   ├── vox_filled_boxes.ply              # Uncolored filled voxels
 │   ├── vox_surface_boxes.ply             # Surface voxels only
-│   └── vox_occupancy_sparse.npz          # Raw voxel data
+│   ├── vox_occupancy_sparse.npz          # Raw voxel data
+│   ├── voxels_filled_indices_colors.npz  # FEA-ready voxel data
+│   └── fea_analysis/                     # FEA results (if run)
+│       ├── model.inp                     # CalculiX input file
+│       ├── model.dat                     # CalculiX results
+│       ├── nodal_displacements.csv      # Node displacement results
+│       ├── element_stresses.csv         # Element stress results
+│       ├── element_stresses_by_part.csv # Detailed part analysis
+│       └── part_summary.csv             # Part summary statistics
 └── model2/                    # Folder for model2.ply
     └── ... (same structure)
 ```
@@ -60,6 +77,9 @@ voxel_out/
 - **✅ Multiple Formats** - Box meshes, point clouds, raw data
 - **✅ Surface & Filled** - Both surface and interior voxels
 - **✅ Memory Efficient** - Chunked processing for large models
+- **✅ FEA Analysis** - Convert voxels to CalculiX FEA models
+- **✅ Stress Analysis** - Run finite element stress calculations
+- **✅ Part-based Results** - Analyze results by material/color regions
 
 ## 📋 Requirements
 
@@ -68,6 +88,8 @@ voxel_out/
 - numpy
 - scipy
 - rtree
+- pandas
+- CalculiX (for FEA analysis)
 
 ## 🔧 Usage Examples
 
@@ -109,6 +131,30 @@ Open `voxels_filled_colored_boxes.ply` in:
 - **Memory Safe**: Processes large models in chunks
 - **Watertight Support**: Works with both open and closed meshes
 
+## 🔧 CalculiX Installation
+
+For FEA analysis, you need CalculiX installed:
+
+### Windows
+1. Download from: https://www.calculix.de/
+2. Extract and add to PATH
+3. Or place `ccx.exe` in your project directory
+
+### Linux
+```bash
+sudo apt-get install calculix-ccx
+```
+
+### macOS
+```bash
+brew install calculix
+```
+
+### Verify Installation
+```bash
+python install_calculix.py
+```
+
 ## 🐛 Troubleshooting
 
 **No PLY files found?**
@@ -122,6 +168,11 @@ Open `voxels_filled_colored_boxes.ply` in:
 **Colors not showing?**
 - Ensure your PLY files have face colors
 - Check mesh has proper color data
+
+**CalculiX not found?**
+- Run `python install_calculix.py` for installation help
+- Make sure CalculiX is in your PATH
+- Check CalculiX installation with `ccx --version`
 
 ## 📝 License
 

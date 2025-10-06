@@ -146,6 +146,30 @@ def process_single_ply(ply_path, output_base_dir="voxel_out"):
             boxes.export(fallback_ply)
             print("saved:", fallback_ply, "(uncolored)")
     
+    # Save voxel indices and colors for FEA analysis
+    if has_face_colors:
+        # Use the voxel_rgba from color propagation
+        np.savez_compressed(
+            os.path.join(out_dir, "voxels_filled_indices_colors.npz"),
+            indices=vg_filled.sparse_indices.astype(np.int32),          # (N,3)
+            colors=voxel_rgba.astype(np.uint8),                        # (N,4)
+            pitch=np.array([vg_filled.pitch], np.float32),
+            transform=vg_filled.transform.astype(np.float32)  # 4x4
+        )
+        print("saved:", os.path.join(out_dir, "voxels_filled_indices_colors.npz"))
+    else:
+        # Create default colors (white) for FEA analysis even without face colors
+        num_voxels = len(vg_filled.sparse_indices)
+        default_colors = np.full((num_voxels, 4), 255, dtype=np.uint8)  # White RGBA
+        np.savez_compressed(
+            os.path.join(out_dir, "voxels_filled_indices_colors.npz"),
+            indices=vg_filled.sparse_indices.astype(np.int32),          # (N,3)
+            colors=default_colors,                                     # (N,4) white
+            pitch=np.array([vg_filled.pitch], np.float32),
+            transform=vg_filled.transform.astype(np.float32)  # 4x4
+        )
+        print("saved:", os.path.join(out_dir, "voxels_filled_indices_colors.npz"), "(with default white colors)")
+    
     print(f"\n=== COMPLETE for {base_name} ===")
     print(f"All outputs saved to: {out_dir}/")
     print("Files created:")

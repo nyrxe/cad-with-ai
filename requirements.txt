@@ -8,6 +8,8 @@ trimesh>=4.8,<5
 #if it fails on linux download libspatialindex first
 rtree>=1.2.0
 
+# For FEA analysis and data processing
+pandas>=1.5.0,<3
 
 # Only if you want to visualize locally in Python, not needed (just use meshlab)
 # open3d>=0.18.0
