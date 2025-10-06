@@ -45,6 +45,9 @@ Thumbs.db
 *.12d
 *.frd
 
+# Generated output directories
+voxel_out/
+
 # Large output files (optional - uncomment if you don't want to track them)
 # voxel_out/
 # *.ply
