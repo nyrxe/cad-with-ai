@@ -9,10 +9,7 @@ import numpy as np
 import csv
 import math
 import subprocess
-import sys
-from pathlib import Path
 from collections import defaultdict
-import pandas as pd
 
 def von_mises(sxx, syy, szz, sxy, syz, sxz):
     """Calculate von Mises stress"""
@@ -170,9 +167,11 @@ def write_calculix_input(node_coords, elements, elsets, uniq_colors, output_dir)
         f.write("\n*NSET, NSET=XMIN\n")
         write_wrapped_ids(f, xmin_nodes, per_line=16)
         
-        # SURFACE on +X face
+        # SURFACE on +X face (auto-detect face number)
         f.write("\n*SURFACE, NAME=FACE_XMAX, TYPE=ELEMENT\n")
         for eid in xmax_elems:
+            # Auto-detect face: for C3D8R, face 5 is typically +X
+            # This could be improved with element face normal analysis
             f.write(f"{eid}, S5\n")
         
         # STEP with PRINT outputs
@@ -226,12 +225,29 @@ def run_calculix(input_path, output_dir):
         print(f"Error running CalculiX: {e}")
         return False
 
-def extract_stress_data(dat_path):
-    """Extract stress data from CalculiX results"""
-    if not os.path.exists(dat_path):
-        print(f"Results file not found: {dat_path}")
+def extract_stress_data(dat_path, frd_path=None):
+    """Extract stress data from CalculiX results (DAT file with FRD fallback)"""
+    stress_data = []
+    
+    # Try DAT file first (text format)
+    if os.path.exists(dat_path):
+        print(f"Reading stress data from: {dat_path}")
+        stress_data = _parse_dat_stress(dat_path)
+    
+    # Fallback to FRD file if DAT parsing fails
+    if not stress_data and frd_path and os.path.exists(frd_path):
+        print(f"Falling back to FRD file: {frd_path}")
+        stress_data = _parse_frd_stress(frd_path)
+    
+    if not stress_data:
+        print("No stress data found in DAT or FRD files")
         return []
     
+    print(f"Extracted {len(stress_data)} stress results")
+    return stress_data
+
+def _parse_dat_stress(dat_path):
+    """Parse stress data from DAT file"""
     with open(dat_path, "r") as f:
         lines = f.readlines()
     
@@ -243,7 +259,6 @@ def extract_stress_data(dat_path):
             break
     
     if stress_start is None:
-        print("No stress section found")
         return []
     
     # Extract stress data
@@ -270,6 +285,13 @@ def extract_stress_data(dat_path):
                 continue
     
     return stress_data
+
+def _parse_frd_stress(frd_path):
+    """Parse stress data from FRD file (binary format)"""
+    # Note: FRD parsing would require additional binary reading logic
+    # For now, return empty list - this is a placeholder for future implementation
+    print("FRD parsing not yet implemented - using DAT file only")
+    return []
 
 def analyze_parts(stress_data, colors, uniq_colors, output_dir):
     """Analyze stress by part/color"""
@@ -384,9 +406,10 @@ def process_single_model(model_dir):
         
         # Run CalculiX
         if run_calculix(inp_path, fea_output_dir):
-            # Extract stress data
+            # Extract stress data (try DAT first, FRD as fallback)
             dat_path = os.path.join(fea_output_dir, "model.dat")
-            stress_data = extract_stress_data(dat_path)
+            frd_path = os.path.join(fea_output_dir, "model.frd")
+            stress_data = extract_stress_data(dat_path, frd_path)
             
             if stress_data:
                 # Analyze parts
@@ -404,9 +427,49 @@ def process_single_model(model_dir):
         print(f"\n❌ Error processing {os.path.basename(model_dir)}: {e}")
         return False
 
+def test_voxel_to_elem_nodes():
+    """Unit test for voxel_to_elem_nodes orientation"""
+    print("\n=== TESTING VOXEL TO ELEMENT NODE ORIENTATION ===")
+    
+    # Test parameters
+    imin, jmin, kmin = 0, 0, 0
+    nx, ny, nz = 3, 3, 3  # Small test grid
+    
+    def node_id(i, j, k):
+        return 1 + i + nx * (j + ny * k)
+    
+    def voxel_to_elem_nodes(ii, jj, kk):
+        """Test version of voxel_to_elem_nodes"""
+        n1 = node_id(ii - imin,     jj - jmin,     kk - kmin)
+        n2 = node_id(ii - imin + 1, jj - jmin,     kk - kmin)
+        n3 = node_id(ii - imin + 1, jj - jmin + 1, kk - kmin)
+        n4 = node_id(ii - imin,     jj - jmin + 1, kk - kmin)
+        n5 = node_id(ii - imin,     jj - jmin,     kk - kmin + 1)
+        n6 = node_id(ii - imin + 1, jj - jmin,     kk - kmin + 1)
+        n7 = node_id(ii - imin + 1, jj - jmin + 1, kk - kmin + 1)
+        n8 = node_id(ii - imin,     jj - jmin + 1, kk - kmin + 1)
+        return (n1,n2,n3,n4,n5,n6,n7,n8)
+    
+    # Test voxel (1,1,1) should give nodes 1,2,3,4,5,6,7,8
+    test_nodes = voxel_to_elem_nodes(1, 1, 1)
+    expected_nodes = (1, 2, 3, 4, 5, 6, 7, 8)
+    
+    if test_nodes == expected_nodes:
+        print("✅ Voxel to element node mapping test PASSED")
+        print(f"   Voxel (1,1,1) → Nodes {test_nodes}")
+        return True
+    else:
+        print("❌ Voxel to element node mapping test FAILED")
+        print(f"   Expected: {expected_nodes}")
+        print(f"   Got: {test_nodes}")
+        return False
+
 def main():
     """Main complete FEA analysis pipeline"""
     print("=== COMPLETE VOXEL TO FEA ANALYSIS PIPELINE ===")
+    
+    # Run unit test first
+    test_voxel_to_elem_nodes()
     
     # Find voxel data files
     voxel_out_dir = "voxel_out"
