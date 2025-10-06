@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Voxel to FEA Analysis Pipeline
-Converts voxelized PLY models to CalculiX FEA models and runs stress analysis
+Complete Voxel to FEA Analysis Pipeline
+Combines FEA mesh generation, CalculiX analysis, and part-based results
 """
 
 import os
@@ -13,6 +13,10 @@ import sys
 from pathlib import Path
 from collections import defaultdict
 import pandas as pd
+
+def von_mises(sxx, syy, szz, sxy, syz, sxz):
+    """Calculate von Mises stress"""
+    return math.sqrt(0.5*((sxx-syy)**2 + (syy-szz)**2 + (szz-sxx)**2) + 3*(sxy**2 + syz**2 + sxz**2))
 
 def load_voxel_data(npz_path):
     """Load voxel indices and colors from NPZ file"""
@@ -222,178 +226,187 @@ def run_calculix(input_path, output_dir):
         print(f"Error running CalculiX: {e}")
         return False
 
-def parse_calculix_results(dat_path, elements, elsets, uniq_colors, node_coords, output_dir):
-    """Parse CalculiX results and create CSV files"""
-    print("\n=== PARSING CALCULIX RESULTS ===")
-    
+def extract_stress_data(dat_path):
+    """Extract stress data from CalculiX results"""
     if not os.path.exists(dat_path):
         print(f"Results file not found: {dat_path}")
+        return []
+    
+    with open(dat_path, "r") as f:
+        lines = f.readlines()
+    
+    # Find stress section
+    stress_start = None
+    for i, line in enumerate(lines):
+        if "stresses (elem, integ.pnt.,sxx,syy,szz,sxy,sxz,syz)" in line:
+            stress_start = i + 1
+            break
+    
+    if stress_start is None:
+        print("No stress section found")
+        return []
+    
+    # Extract stress data
+    stress_data = []
+    for i in range(stress_start, len(lines)):
+        line = lines[i].strip()
+        if not line:
+            continue
+            
+        parts = line.split()
+        if len(parts) >= 8:
+            try:
+                elem_id = int(parts[0])
+                sxx = float(parts[2])
+                syy = float(parts[3]) 
+                szz = float(parts[4])
+                sxy = float(parts[5])
+                sxz = float(parts[6])
+                syz = float(parts[7])
+                
+                vm = von_mises(sxx, syy, szz, sxy, syz, sxz)
+                stress_data.append([elem_id, sxx, syy, szz, sxy, syz, sxz, vm])
+            except (ValueError, IndexError):
+                continue
+    
+    return stress_data
+
+def analyze_parts(stress_data, colors, uniq_colors, output_dir):
+    """Analyze stress by part/color"""
+    print("\n=== PART-BASED STRESS ANALYSIS ===")
+    
+    if not stress_data:
+        print("No stress data to analyze")
         return
     
-    # Helper functions
-    def is_int(s):
-        try: int(s); return True
-        except: return False
+    # Get unique colors and create mapping
+    unique_colors, color_indices = np.unique(colors, axis=0, return_inverse=True)
+    num_parts = len(unique_colors)
+    print(f"Found {num_parts} unique parts (colors)")
     
-    def is_float(s):
-        try: float(s); return True
-        except: return False
+    # Show parts
+    for i, color in enumerate(unique_colors):
+        part_name = f"PART_{i:03d}_R{color[0]}G{color[1]}B{color[2]}A{color[3]}"
+        count = np.sum(color_indices == i)
+        print(f"  {part_name}: {count} voxels")
     
-    def von_mises(Sxx, Syy, Szz, Sxy, Syz, Szx):
-        return math.sqrt(0.5*((Sxx-Syy)**2 + (Syy-Szz)**2 + (Szz-Sxx)**2) + 3*(Sxy**2 + Syz**2 + Szx**2))
-    
-    # Read and parse results
-    with open(dat_path, "r", errors="ignore") as f:
-        lines = [ln.strip() for ln in f]
-    
-    # Parse NODE PRINT (U)
-    node_rows = []
-    in_node = False
-    for ln in lines:
-        s = ln.strip()
-        if not s:
-            if in_node:
-                in_node = False
-            continue
+    # Group elements by part
+    part_stresses = defaultdict(list)
+    for elem_data in stress_data:
+        elem_id = elem_data[0]
+        vm_stress = elem_data[7]  # von Mises stress
         
-        if not in_node and s.startswith("U") and "N O D E" in s:
-            in_node = True
-            continue
-        
-        if in_node:
-            parts = s.split()
-            if len(parts) >= 4 and is_int(parts[0]) and all(is_float(p) for p in parts[1:4]):
-                nid = int(parts[0])
-                ux, uy, uz = map(float, parts[1:4])
-                node_rows.append([nid, ux, uy, uz])
+        # Find which part this element belongs to
+        if elem_id <= len(color_indices):
+            part_idx = color_indices[elem_id - 1]  # elem_id is 1-based
+            part_stresses[part_idx].append(vm_stress)
     
-    # Parse EL PRINT (S, E)
-    elem_rows = []
-    in_elem = False
-    for ln in lines:
-        s = ln.strip()
-        if not s:
-            if in_elem:
-                in_elem = False
-            continue
+    # Calculate part statistics
+    part_summary = []
+    for part_idx in range(num_parts):
+        if part_idx in part_stresses:
+            stresses = np.array(part_stresses[part_idx])
+            color = unique_colors[part_idx]
+            part_name = f"PART_{part_idx:03d}_R{color[0]}G{color[1]}B{color[2]}A{color[3]}"
+            
+            summary = {
+                'Part': part_name,
+                'Color_RGBA': f"({color[0]},{color[1]},{color[2]},{color[3]})",
+                'ElementCount': len(stresses),
+                'vonMises_max_Pa': np.max(stresses),
+                'vonMises_mean_Pa': np.mean(stresses),
+                'vonMises_min_Pa': np.min(stresses),
+                'vonMises_p95_Pa': np.percentile(stresses, 95),
+                'vonMises_std_Pa': np.std(stresses)
+            }
+            part_summary.append(summary)
+            
+            print(f"\n{part_name}:")
+            print(f"  Elements: {len(stresses)}")
+            print(f"  Max stress: {np.max(stresses):.2e} Pa ({np.max(stresses)/1e6:.1f} MPa)")
+            print(f"  Mean stress: {np.mean(stresses):.2e} Pa ({np.mean(stresses)/1e6:.1f} MPa)")
+            print(f"  95th percentile: {np.percentile(stresses, 95):.2e} Pa ({np.percentile(stresses, 95)/1e6:.1f} MPa)")
+    
+    # Save part summary CSV
+    csv_path = os.path.join(output_dir, "part_stress_summary.csv")
+    with open(csv_path, "w", newline="") as f:
+        if part_summary:
+            writer = csv.DictWriter(f, fieldnames=part_summary[0].keys())
+            writer.writeheader()
+            writer.writerows(part_summary)
+    
+    print(f"\nPart summary saved to: {csv_path}")
+    
+    # Save detailed part data
+    detailed_path = os.path.join(output_dir, "part_detailed_results.csv")
+    with open(detailed_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Part", "ElementID", "vonMises_Pa", "Sxx_Pa", "Syy_Pa", "Szz_Pa", "Sxy_Pa", "Syz_Pa", "Szx_Pa"])
         
-        if not in_elem and s.startswith("S") and "E L E M E N T" in s:
-            in_elem = True
-            continue
-        
-        if in_elem:
-            parts = s.split()
-            # Handle both formats: eid Sxx... and eid IP Sxx...
-            if len(parts) >= 7 and is_int(parts[0]):
-                if all(is_float(p) for p in parts[1:7]):
-                    # Format: eid Sxx Syy Szz Sxy Syz Szx
-                    eid = int(parts[0])
-                    Sxx, Syy, Szz, Sxy, Syz, Szx = map(float, parts[1:7])
-                elif len(parts) >= 8 and is_int(parts[1]) and all(is_float(p) for p in parts[2:8]):
-                    # Format: eid IP Sxx Syy Szz Sxy Syz Szx
-                    eid = int(parts[0])
-                    Sxx, Syy, Szz, Sxy, Syz, Szx = map(float, parts[2:8])
-                else:
-                    continue
+        for elem_data in stress_data:
+            elem_id = elem_data[0]
+            if elem_id <= len(color_indices):
+                part_idx = color_indices[elem_id - 1]
+                color = unique_colors[part_idx]
+                part_name = f"PART_{part_idx:03d}_R{color[0]}G{color[1]}B{color[2]}A{color[3]}"
                 
-                vm = von_mises(Sxx, Syy, Szz, Sxy, Syz, Szx)
-                elem_rows.append([eid, Sxx, Syy, Szz, Sxy, Syz, Szx, vm])
+                writer.writerow([part_name, elem_id] + elem_data[1:])
     
-    # Write CSV files
-    csv_nodes = os.path.join(output_dir, "nodal_displacements.csv")
-    csv_elems = os.path.join(output_dir, "element_stresses.csv")
-    
-    with open(csv_nodes, "w", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["NodeID", "Ux", "Uy", "Uz"])
-        w.writerows(node_rows)
-    
-    with open(csv_elems, "w", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["ElemID", "Sxx", "Syy", "Szz", "Sxy", "Syz", "Szx", "vonMises"])
-        w.writerows(elem_rows)
-    
-    print(f"Results written:")
-    print(f"  - {csv_nodes} ({len(node_rows)} nodes)")
-    print(f"  - {csv_elems} ({len(elem_rows)} elements)")
-    
-    # Create detailed element analysis with parts
-    create_detailed_analysis(elem_rows, elements, elsets, uniq_colors, node_coords, output_dir)
+    print(f"Detailed results saved to: {detailed_path}")
 
-def create_detailed_analysis(elem_rows, elements, elsets, uniq_colors, node_coords, output_dir):
-    """Create detailed analysis with part information"""
-    print("\n=== CREATING DETAILED ANALYSIS ===")
+def process_single_model(model_dir):
+    """Process a single model through complete pipeline"""
+    print(f"\n{'='*60}")
+    print(f"PROCESSING: {os.path.basename(model_dir)}")
+    print(f"{'='*60}")
     
-    # Create element -> part mapping
-    part_names = {}
-    for lbl, eids in elsets.items():
-        rgba = tuple(int(x) for x in uniq_colors[lbl])
-        name = f"PART_{int(lbl):03d}_R{rgba[0]}G{rgba[1]}B{rgba[2]}A{rgba[3]}"
-        for eid in eids:
-            part_names[int(eid)] = name
+    npz_path = os.path.join(model_dir, "voxels_filled_indices_colors.npz")
     
-    # Calculate element volumes
-    def detJ_center(node_ids):
-        X = np.array([node_coords[n-1] for n in node_ids], float)
-        dN = np.array([
-            [-1,-1,-1], [ 1,-1,-1], [ 1, 1,-1], [-1, 1,-1],
-            [-1,-1, 1], [ 1,-1, 1], [ 1, 1, 1], [-1, 1, 1],
-        ], float) * 0.125
-        J = dN.T @ X
-        return float(np.linalg.det(J))
+    if not os.path.exists(npz_path):
+        print(f"Voxel data not found: {npz_path}")
+        print("Skipping this dataset...")
+        return False
     
-    elem_nodes = {e_id: nodes for (e_id, nodes) in elements}
-    elem_vol = {}
-    for e_id in range(1, len(elements)+1):
-        detJ = detJ_center(elem_nodes[e_id])
-        elem_vol[e_id] = 8.0 * abs(detJ)  # m^3
-    
-    density = 2700.0  # kg/m^3
-    
-    # Create detailed CSV
-    csv_detailed = os.path.join(output_dir, "element_stresses_by_part.csv")
-    with open(csv_detailed, "w", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["ElemID", "Part", "Volume_m3", "Mass_kg", "Sxx", "Syy", "Szz", "Sxy", "Syz", "Szx", "vonMises_Pa"])
+    try:
+        # Load voxel data
+        idx, colors, pitch, transform = load_voxel_data(npz_path)
         
-        for (eid, Sxx, Syy, Szz, Sxy, Syz, Szx, vm) in elem_rows:
-            part = part_names.get(eid, "UNLABELED")
-            vol = elem_vol.get(eid, 0.0)
-            mass = density * vol
-            w.writerow([eid, part, vol, mass, Sxx, Syy, Szz, Sxy, Syz, Szx, vm])
-    
-    # Create part summary
-    df = pd.read_csv(csv_detailed)
-    
-    def p95(x):
-        return float(np.percentile(np.asarray(x, dtype=float), 95)) if len(x) else float("nan")
-    
-    g = df.groupby("Part", dropna=False)
-    summary = pd.DataFrame({
-        "Part": g.size().index,
-        "ElemCount": g.size().values,
-        "TotalVolume_m3": g["Volume_m3"].sum().values,
-        "TotalMass_kg": g["Mass_kg"].sum().values,
-        "vonMises_max_Pa": g["vonMises_Pa"].max().values,
-        "vonMises_mean_Pa": g["vonMises_Pa"].mean().values,
-        "vonMises_p95_Pa": g["vonMises_Pa"].apply(p95).values,
-    })
-    
-    summary = summary.sort_values("Part").reset_index(drop=True)
-    csv_summary = os.path.join(output_dir, "part_summary.csv")
-    summary.to_csv(csv_summary, index=False)
-    
-    print(f"Detailed analysis written:")
-    print(f"  - {csv_detailed}")
-    print(f"  - {csv_summary}")
-    
-    # Display summary
-    print("\nPart Summary:")
-    print(summary.to_string(index=False))
+        # Generate FEA mesh
+        node_coords, elements, elsets, uniq_colors, imin, jmin, kmin = generate_fea_mesh(
+            idx, colors, pitch, transform)
+        
+        # Create FEA output directory
+        fea_output_dir = os.path.join(model_dir, "fea_analysis")
+        os.makedirs(fea_output_dir, exist_ok=True)
+        
+        # Write CalculiX input
+        inp_path = write_calculix_input(node_coords, elements, elsets, uniq_colors, fea_output_dir)
+        
+        # Run CalculiX
+        if run_calculix(inp_path, fea_output_dir):
+            # Extract stress data
+            dat_path = os.path.join(fea_output_dir, "model.dat")
+            stress_data = extract_stress_data(dat_path)
+            
+            if stress_data:
+                # Analyze parts
+                analyze_parts(stress_data, colors, uniq_colors, fea_output_dir)
+                print(f"\n✅ Complete analysis finished for {os.path.basename(model_dir)}")
+                return True
+            else:
+                print(f"\n❌ No stress data extracted for {os.path.basename(model_dir)}")
+                return False
+        else:
+            print(f"\n❌ FEA analysis failed for {os.path.basename(model_dir)}")
+            return False
+            
+    except Exception as e:
+        print(f"\n❌ Error processing {os.path.basename(model_dir)}: {e}")
+        return False
 
 def main():
-    """Main FEA analysis pipeline"""
-    print("=== VOXEL TO FEA ANALYSIS PIPELINE ===")
+    """Main complete FEA analysis pipeline"""
+    print("=== COMPLETE VOXEL TO FEA ANALYSIS PIPELINE ===")
     
     # Find voxel data files
     voxel_out_dir = "voxel_out"
@@ -413,49 +426,15 @@ def main():
     print(f"Found {len(voxel_dirs)} voxel datasets: {voxel_dirs}")
     
     # Process each voxel dataset
+    successful = 0
     for voxel_dir in voxel_dirs:
-        print(f"\n{'='*60}")
-        print(f"PROCESSING: {voxel_dir}")
-        print(f"{'='*60}")
-        
         voxel_path = os.path.join(voxel_out_dir, voxel_dir)
-        npz_path = os.path.join(voxel_path, "voxels_filled_indices_colors.npz")
-        
-        if not os.path.exists(npz_path):
-            print(f"Voxel data not found: {npz_path}")
-            print("Skipping this dataset...")
-            continue
-        
-        try:
-            # Load voxel data
-            idx, colors, pitch, transform = load_voxel_data(npz_path)
-            
-            # Generate FEA mesh
-            node_coords, elements, elsets, uniq_colors, imin, jmin, kmin = generate_fea_mesh(
-                idx, colors, pitch, transform)
-            
-            # Create FEA output directory
-            fea_output_dir = os.path.join(voxel_path, "fea_analysis")
-            os.makedirs(fea_output_dir, exist_ok=True)
-            
-            # Write CalculiX input
-            inp_path = write_calculix_input(node_coords, elements, elsets, uniq_colors, fea_output_dir)
-            
-            # Run CalculiX
-            if run_calculix(inp_path, fea_output_dir):
-                # Parse results
-                dat_path = os.path.join(fea_output_dir, "model.dat")
-                parse_calculix_results(dat_path, elements, elsets, uniq_colors, node_coords, fea_output_dir)
-                print(f"\n✅ FEA analysis completed for {voxel_dir}")
-            else:
-                print(f"\n❌ FEA analysis failed for {voxel_dir}")
-                
-        except Exception as e:
-            print(f"\n❌ Error processing {voxel_dir}: {e}")
-            continue
+        if process_single_model(voxel_path):
+            successful += 1
     
     print(f"\n{'='*60}")
-    print("FEA ANALYSIS PIPELINE COMPLETE")
+    print(f"COMPLETE FEA ANALYSIS PIPELINE FINISHED")
+    print(f"Successfully processed: {successful}/{len(voxel_dirs)} models")
     print(f"{'='*60}")
 
 if __name__ == "__main__":

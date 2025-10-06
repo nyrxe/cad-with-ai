@@ -36,13 +36,13 @@ mkdir input
 python voxelize_local.py
 ```
 
-### 4. Run FEA Analysis (Optional)
+### 4. Run Complete FEA Analysis (Optional)
 ```bash
 # Install CalculiX first (see below)
 python install_calculix.py  # Check CalculiX installation
 
-# Run FEA analysis on voxelized models
-python voxel_fea_analysis.py
+# Run complete FEA analysis with part-based results
+python voxel_to_fea_complete.py
 ```
 
 ## 📁 Output Structure
@@ -62,10 +62,8 @@ voxel_out/
 │   └── fea_analysis/                     # FEA results (if run)
 │       ├── model.inp                     # CalculiX input file
 │       ├── model.dat                     # CalculiX results
-│       ├── nodal_displacements.csv      # Node displacement results
-│       ├── element_stresses.csv         # Element stress results
-│       ├── element_stresses_by_part.csv # Detailed part analysis
-│       └── part_summary.csv             # Part summary statistics
+│       ├── part_stress_summary.csv      # Part stress statistics (MAIN RESULT)
+│       └── part_detailed_results.csv    # Detailed element data by part
 └── model2/                    # Folder for model2.ply
     └── ... (same structure)
 =======
