@@ -11,7 +11,7 @@ import os
 import glob
 from trimesh.proximity import ProximityQuery
 
-def process_single_ply(ply_path, output_base_dir="voxel_out"):
+def process_single_ply(ply_path, output_base_dir="voxel_out", target_res=64):
     """Process a single PLY file and create its own output folder"""
     # Get filename without extension for folder name
     base_name = os.path.splitext(os.path.basename(ply_path))[0]
@@ -39,7 +39,7 @@ def process_single_ply(ply_path, output_base_dir="voxel_out"):
         print("face_colors dtype/shape:", mesh.visual.face_colors.dtype, mesh.visual.face_colors.shape)
     
     # Voxelization parameters
-    TARGET_RES = 128  # try 256 later if you want more detail
+    TARGET_RES = target_res  # Use parameter instead of hardcoded value
     longest = float(max(mesh.extents))
     pitch = longest / TARGET_RES
     print(f"target_res={TARGET_RES}, pitch={pitch:.8f} (mesh units)")
@@ -181,6 +181,17 @@ def process_single_ply(ply_path, output_base_dir="voxel_out"):
     return out_dir
 
 def main():
+    import sys
+    
+    # Parse command line arguments
+    target_res = 32  # Default resolution (optimal balance of speed and accuracy)
+    if len(sys.argv) > 1:
+        try:
+            target_res = int(sys.argv[1])
+            print(f"Using custom resolution: {target_res}")
+        except ValueError:
+            print(f"Invalid resolution '{sys.argv[1]}', using default: {target_res}")
+    
     # Find PLY files in input directory
     INPUT_DIR = "input"
     OUTPUT_BASE_DIR = "voxel_out"
@@ -206,7 +217,7 @@ def main():
     processed_dirs = []
     for ply_path in ply_files:
         try:
-            output_dir = process_single_ply(ply_path, OUTPUT_BASE_DIR)
+            output_dir = process_single_ply(ply_path, OUTPUT_BASE_DIR, target_res)
             processed_dirs.append(output_dir)
         except Exception as e:
             print(f"Error processing {ply_path}: {e}")

@@ -183,7 +183,7 @@ def write_calculix_input(node_coords, elements, elsets, uniq_colors, output_dir)
     print(f"CalculiX input written: {inp_path}")
     return inp_path
 
-def run_calculix(input_path, output_dir):
+def run_calculix(input_path, output_dir, num_nodes=None, num_elements=None):
     """Run CalculiX analysis"""
     print("\n=== RUNNING CALCULIX ===")
     
@@ -198,12 +198,32 @@ def run_calculix(input_path, output_dir):
         print("  macOS: brew install calculix")
         return False
     
+    # Check model size and warn if large
+    if num_nodes and num_elements:
+        print(f"Model size: {num_nodes} nodes, {num_elements} elements")
+        
+        if num_nodes > 10000 or num_elements > 10000:
+            print(f"⚠️  Large model detected: {num_nodes} nodes, {num_elements} elements")
+            print("   This may take 10-30 minutes to solve...")
+            
+            # Ask user if they want to continue
+            while True:
+                response = input("   Continue with analysis? (y/n/skip): ").lower().strip()
+                if response in ['y', 'yes']:
+                    print("   Proceeding with analysis...")
+                    break
+                elif response in ['n', 'no', 'skip']:
+                    print("   Skipping this model...")
+                    return False
+                else:
+                    print("   Please enter 'y' for yes, 'n' for no, or 'skip'")
+    
     # Run CalculiX
     base_name = os.path.splitext(os.path.basename(input_path))[0]
     input_dir = os.path.dirname(input_path)
     
     try:
-        result = subprocess.run(['ccx', '-i', base_name], 
+        result = subprocess.run(['ccx', base_name], 
                               cwd=input_dir, 
                               capture_output=True, 
                               text=True, 
@@ -405,7 +425,7 @@ def process_single_model(model_dir):
         inp_path = write_calculix_input(node_coords, elements, elsets, uniq_colors, fea_output_dir)
         
         # Run CalculiX
-        if run_calculix(inp_path, fea_output_dir):
+        if run_calculix(inp_path, fea_output_dir, len(node_coords), len(elements)):
             # Extract stress data (try DAT first, FRD as fallback)
             dat_path = os.path.join(fea_output_dir, "model.dat")
             frd_path = os.path.join(fea_output_dir, "model.frd")
