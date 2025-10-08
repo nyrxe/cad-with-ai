@@ -313,9 +313,9 @@ def _parse_frd_stress(frd_path):
     print("FRD parsing not yet implemented - using DAT file only")
     return []
 
-def analyze_parts(stress_data, colors, uniq_colors, output_dir):
+def analyze_parts(stress_data, colors, uniq_colors, output_dir, model_type="original"):
     """Analyze stress by part/color"""
-    print("\n=== PART-BASED STRESS ANALYSIS ===")
+    print(f"\n=== PART-BASED STRESS ANALYSIS ({model_type.upper()}) ===")
     
     if not stress_data:
         print("No stress data to analyze")
@@ -369,8 +369,12 @@ def analyze_parts(stress_data, colors, uniq_colors, output_dir):
             print(f"  Mean stress: {np.mean(stresses):.2e} Pa ({np.mean(stresses)/1e6:.1f} MPa)")
             print(f"  95th percentile: {np.percentile(stresses, 95):.2e} Pa ({np.percentile(stresses, 95)/1e6:.1f} MPa)")
     
+    # Add model type to part summary
+    for summary in part_summary:
+        summary['Model_Type'] = model_type
+    
     # Save part summary CSV
-    csv_path = os.path.join(output_dir, "part_stress_summary.csv")
+    csv_path = os.path.join(output_dir, f"part_stress_summary_{model_type}.csv")
     with open(csv_path, "w", newline="") as f:
         if part_summary:
             writer = csv.DictWriter(f, fieldnames=part_summary[0].keys())
@@ -380,10 +384,10 @@ def analyze_parts(stress_data, colors, uniq_colors, output_dir):
     print(f"\nPart summary saved to: {csv_path}")
     
     # Save detailed part data
-    detailed_path = os.path.join(output_dir, "part_detailed_results.csv")
+    detailed_path = os.path.join(output_dir, f"part_detailed_results_{model_type}.csv")
     with open(detailed_path, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["Part", "ElementID", "vonMises_Pa", "Sxx_Pa", "Syy_Pa", "Szz_Pa", "Sxy_Pa", "Syz_Pa", "Szx_Pa"])
+        writer.writerow(["Model_Type", "Part", "ElementID", "vonMises_Pa", "Sxx_Pa", "Syy_Pa", "Szz_Pa", "Sxy_Pa", "Syz_Pa", "Szx_Pa"])
         
         for elem_data in stress_data:
             elem_id = elem_data[0]
@@ -392,17 +396,26 @@ def analyze_parts(stress_data, colors, uniq_colors, output_dir):
                 color = unique_colors[part_idx]
                 part_name = f"PART_{part_idx:03d}_R{color[0]}G{color[1]}B{color[2]}A{color[3]}"
                 
-                writer.writerow([part_name, elem_id] + elem_data[1:])
+                writer.writerow([model_type, part_name, elem_id] + elem_data[1:])
     
     print(f"Detailed results saved to: {detailed_path}")
 
-def process_single_model(model_dir):
+def process_single_model(model_dir, model_type="original"):
     """Process a single model through complete pipeline"""
     print(f"\n{'='*60}")
-    print(f"PROCESSING: {os.path.basename(model_dir)}")
+    print(f"PROCESSING: {os.path.basename(model_dir)} ({model_type})")
     print(f"{'='*60}")
     
-    npz_path = os.path.join(model_dir, "voxels_filled_indices_colors.npz")
+    # Check for both original and eroded versions
+    original_npz = os.path.join(model_dir, "voxels_filled_indices_colors.npz")
+    eroded_npz = os.path.join(model_dir, "voxels_filled_indices_colors_eroded.npz")
+    
+    if model_type == "original":
+        npz_path = original_npz
+    elif model_type == "eroded":
+        npz_path = eroded_npz
+    else:
+        raise ValueError("model_type must be 'original' or 'eroded'")
     
     if not os.path.exists(npz_path):
         print(f"Voxel data not found: {npz_path}")
@@ -417,8 +430,11 @@ def process_single_model(model_dir):
         node_coords, elements, elsets, uniq_colors, imin, jmin, kmin = generate_fea_mesh(
             idx, colors, pitch, transform)
         
-        # Create FEA output directory
-        fea_output_dir = os.path.join(model_dir, "fea_analysis")
+        # Create FEA output directory (with type suffix for eroded models)
+        if model_type == "eroded":
+            fea_output_dir = os.path.join(model_dir, "fea_analysis_eroded")
+        else:
+            fea_output_dir = os.path.join(model_dir, "fea_analysis")
         os.makedirs(fea_output_dir, exist_ok=True)
         
         # Write CalculiX input
@@ -432,19 +448,19 @@ def process_single_model(model_dir):
             stress_data = extract_stress_data(dat_path, frd_path)
             
             if stress_data:
-                # Analyze parts
-                analyze_parts(stress_data, colors, uniq_colors, fea_output_dir)
-                print(f"\n✅ Complete analysis finished for {os.path.basename(model_dir)}")
+                # Analyze parts (with model type in results)
+                analyze_parts(stress_data, colors, uniq_colors, fea_output_dir, model_type)
+                print(f"\n✅ Complete analysis finished for {os.path.basename(model_dir)} ({model_type})")
                 return True
             else:
-                print(f"\n❌ No stress data extracted for {os.path.basename(model_dir)}")
+                print(f"\n❌ No stress data extracted for {os.path.basename(model_dir)} ({model_type})")
                 return False
         else:
-            print(f"\n❌ FEA analysis failed for {os.path.basename(model_dir)}")
+            print(f"\n❌ FEA analysis failed for {os.path.basename(model_dir)} ({model_type})")
             return False
             
     except Exception as e:
-        print(f"\n❌ Error processing {os.path.basename(model_dir)}: {e}")
+        print(f"\n❌ Error processing {os.path.basename(model_dir)} ({model_type}): {e}")
         return False
 
 def test_voxel_to_elem_nodes():
@@ -508,17 +524,47 @@ def main():
     
     print(f"Found {len(voxel_dirs)} voxel datasets: {voxel_dirs}")
     
-    # Process each voxel dataset
-    successful = 0
+    # Process each voxel dataset (both original and eroded if available)
+    successful_original = 0
+    successful_eroded = 0
+    
     for voxel_dir in voxel_dirs:
         voxel_path = os.path.join(voxel_out_dir, voxel_dir)
-        if process_single_model(voxel_path):
-            successful += 1
+        
+        # Process original model
+        print(f"\n{'='*80}")
+        print(f"PROCESSING ORIGINAL MODEL: {voxel_dir}")
+        print(f"{'='*80}")
+        if process_single_model(voxel_path, "original"):
+            successful_original += 1
+        
+        # Check if eroded version exists
+        eroded_npz = os.path.join(voxel_path, "voxels_filled_indices_colors_eroded.npz")
+        if os.path.exists(eroded_npz):
+            print(f"\n{'='*80}")
+            print(f"PROCESSING ERODED MODEL: {voxel_dir}")
+            print(f"{'='*80}")
+            if process_single_model(voxel_path, "eroded"):
+                successful_eroded += 1
+        else:
+            print(f"\nNo eroded version found for {voxel_dir}")
+            print("Run: python voxel_erosion.py to create eroded versions")
     
-    print(f"\n{'='*60}")
+    print(f"\n{'='*80}")
     print(f"COMPLETE FEA ANALYSIS PIPELINE FINISHED")
-    print(f"Successfully processed: {successful}/{len(voxel_dirs)} models")
-    print(f"{'='*60}")
+    print(f"Successfully processed original models: {successful_original}/{len(voxel_dirs)}")
+    print(f"Successfully processed eroded models: {successful_eroded}/{len(voxel_dirs)}")
+    print(f"{'='*80}")
+    
+    if successful_eroded > 0:
+        print(f"\n📊 COMPARISON ANALYSIS AVAILABLE:")
+        print(f"   - Original models: {successful_original} completed")
+        print(f"   - Eroded models: {successful_eroded} completed")
+        print(f"   - Check CSV files for thick vs thin comparison")
+    else:
+        print(f"\n💡 TIP: Create eroded versions for comparison:")
+        print(f"   python voxel_erosion.py")
+        print(f"   Then run this analysis again to compare thick vs thin models")
 
 if __name__ == "__main__":
     main()
