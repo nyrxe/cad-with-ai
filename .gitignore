@@ -44,6 +44,7 @@ Thumbs.db
 *.sta
 *.12d
 *.frd
+spooles.out
 
 # Generated output directories
 voxel_out/
