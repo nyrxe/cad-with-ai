@@ -48,10 +48,11 @@ def combine_fea_results(base_dir="voxel_out"):
             all_summaries.append(df_summary)
             print(f"Added original results for {model_dir}")
         
-        if os.path.exists(original_detailed):
-            df_detailed = pd.read_csv(original_detailed)
-            df_detailed['Model'] = model_dir
-            all_detailed.append(df_detailed)
+        # Skip detailed results for AI - only need part summaries
+        # if os.path.exists(original_detailed):
+        #     df_detailed = pd.read_csv(original_detailed)
+        #     df_detailed['Model'] = model_dir
+        #     all_detailed.append(df_detailed)
         
         # Process eroded model results
         eroded_summary = os.path.join(model_path, "fea_analysis_eroded", "part_stress_summary_eroded.csv")
@@ -63,10 +64,11 @@ def combine_fea_results(base_dir="voxel_out"):
             all_summaries.append(df_summary)
             print(f"Added eroded results for {model_dir}")
         
-        if os.path.exists(eroded_detailed):
-            df_detailed = pd.read_csv(eroded_detailed)
-            df_detailed['Model'] = model_dir
-            all_detailed.append(df_detailed)
+        # Skip detailed results for AI - only need part summaries
+        # if os.path.exists(eroded_detailed):
+        #     df_detailed = pd.read_csv(eroded_detailed)
+        #     df_detailed['Model'] = model_dir
+        #     all_detailed.append(df_detailed)
     
     # Combine and save results
     if all_summaries:
@@ -82,12 +84,13 @@ def combine_fea_results(base_dir="voxel_out"):
         for model_type, count in type_counts.items():
             print(f"  {model_type}: {count} parts")
     
-    if all_detailed:
-        combined_detailed = pd.concat(all_detailed, ignore_index=True)
-        detailed_path = os.path.join(base_dir, "combined_detailed_results.csv")
-        combined_detailed.to_csv(detailed_path, index=False)
-        print(f"Combined detailed results saved to: {detailed_path}")
-        print(f"Total records: {len(combined_detailed)}")
+    # Skip detailed results for AI - only need part summaries
+    # if all_detailed:
+    #     combined_detailed = pd.concat(all_detailed, ignore_index=True)
+    #     detailed_path = os.path.join(base_dir, "combined_detailed_results.csv")
+    #     combined_detailed.to_csv(detailed_path, index=False)
+    #     print(f"Combined detailed results saved to: {detailed_path}")
+    #     print(f"Total records: {len(combined_detailed)}")
     
     # Create comparison analysis
     if all_summaries:

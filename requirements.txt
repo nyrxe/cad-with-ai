@@ -11,5 +11,11 @@ rtree>=1.2.0
 # For FEA analysis and data processing
 pandas>=1.5.0,<3
 
+# For AI/ML analysis and visualization
+matplotlib>=3.5.0,<4
+seaborn>=0.11.0,<1
+scikit-learn>=1.1.0,<2
+joblib>=1.1.0,<2
+
 # Only if you want to visualize locally in Python, not needed (just use meshlab)
 # open3d>=0.18.0

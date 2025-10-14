@@ -44,6 +44,7 @@ Thumbs.db
 *.sta
 *.12d
 *.frd
+spooles.out
 
 # Generated output directories
 voxel_out/
@@ -54,6 +55,45 @@ voxel_out/
 # *.npz
 # *.dat
 # *.inp
+
+# Generated datasets and results
+*.csv
+dataset_with_mass_volume.csv
+pairwise_finite.csv
+pairwise_eda_clipped.csv
+pairwise_thinning_dataset.csv
+combined_stress_summary.csv
+thick_vs_thin_comparison.csv
+
+# AI/ML models and data
+ai_models/
+*.pkl
+pairwise_thinning_model.pkl
+
+# Generated visualizations
+*.png
+*.jpg
+*.jpeg
+mass_volume_analysis.png
+pairwise_thinning_analysis.png
+pairwise_thinning_with_mass_analysis.png
+enhanced_thickness_optimization_analysis.png
+
+# Temporary and cache files
+*.tmp
+*.temp
+*.log
+*.out
+
+# Large data files
+*.ply
+*.npz
+*.dat
+*.inp
+*.frd
+*.cvg
+*.sta
+*.12d
 
 # Results (optional - uncomment if you don't want to track results)
 # part_detailed_results.csv

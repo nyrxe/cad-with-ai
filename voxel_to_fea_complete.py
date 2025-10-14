@@ -206,17 +206,18 @@ def run_calculix(input_path, output_dir, num_nodes=None, num_elements=None):
             print(f"⚠️  Large model detected: {num_nodes} nodes, {num_elements} elements")
             print("   This may take 10-30 minutes to solve...")
             
-            # Ask user if they want to continue
-            while True:
-                response = input("   Continue with analysis? (y/n/skip): ").lower().strip()
-                if response in ['y', 'yes']:
-                    print("   Proceeding with analysis...")
-                    break
-                elif response in ['n', 'no', 'skip']:
-                    print("   Skipping this model...")
-                    return False
-                else:
-                    print("   Please enter 'y' for yes, 'n' for no, or 'skip'")
+            # Ask user if they want to continue (COMMENTED OUT FOR AI)
+            # while True:
+            #     response = input("   Continue with analysis? (y/n/skip): ").lower().strip()
+            #     if response in ['y', 'yes']:
+            #         print("   Proceeding with analysis...")
+            #         break
+            #     elif response in ['n', 'no', 'skip']:
+            #         print("   Skipping this model...")
+            #         return False
+            #     else:
+            #         print("   Please enter 'y' for yes, 'n' for no, or 'skip'")
+            print("   Proceeding with analysis automatically...")
     
     # Run CalculiX
     base_name = os.path.splitext(os.path.basename(input_path))[0]
@@ -383,22 +384,22 @@ def analyze_parts(stress_data, colors, uniq_colors, output_dir, model_type="orig
     
     print(f"\nPart summary saved to: {csv_path}")
     
-    # Save detailed part data
-    detailed_path = os.path.join(output_dir, f"part_detailed_results_{model_type}.csv")
-    with open(detailed_path, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["Model_Type", "Part", "ElementID", "vonMises_Pa", "Sxx_Pa", "Syy_Pa", "Szz_Pa", "Sxy_Pa", "Syz_Pa", "Szx_Pa"])
-        
-        for elem_data in stress_data:
-            elem_id = elem_data[0]
-            if elem_id <= len(color_indices):
-                part_idx = color_indices[elem_id - 1]
-                color = unique_colors[part_idx]
-                part_name = f"PART_{part_idx:03d}_R{color[0]}G{color[1]}B{color[2]}A{color[3]}"
-                
-                writer.writerow([model_type, part_name, elem_id] + elem_data[1:])
-    
-    print(f"Detailed results saved to: {detailed_path}")
+    # Save detailed part data (COMMENTED OUT FOR AI - only need part summaries)
+    # detailed_path = os.path.join(output_dir, f"part_detailed_results_{model_type}.csv")
+    # with open(detailed_path, "w", newline="") as f:
+    #     writer = csv.writer(f)
+    #     writer.writerow(["Model_Type", "Part", "ElementID", "vonMises_Pa", "Sxx_Pa", "Syy_Pa", "Szz_Pa", "Sxy_Pa", "Syz_Pa", "Szx_Pa"])
+    #     
+    #     for elem_data in stress_data:
+    #         elem_id = elem_data[0]
+    #         if elem_id <= len(color_indices):
+    #             part_idx = color_indices[elem_id - 1]
+    #             color = unique_colors[part_idx]
+    #             part_name = f"PART_{part_idx:03d}_R{color[0]}G{color[1]}B{color[2]}A{color[3]}"
+    #             
+    #             writer.writerow([model_type, part_name, elem_id] + elem_data[1:])
+    # 
+    # print(f"Detailed results saved to: {detailed_path}")
 
 def process_single_model(model_dir, model_type="original"):
     """Process a single model through complete pipeline"""
@@ -408,7 +409,7 @@ def process_single_model(model_dir, model_type="original"):
     
     # Check for both original and eroded versions
     original_npz = os.path.join(model_dir, "voxels_filled_indices_colors.npz")
-    eroded_npz = os.path.join(model_dir, "voxels_filled_indices_colors_eroded.npz")
+    eroded_npz = os.path.join(model_dir, "voxels_filled_indices_colors_thinned.npz")
     
     if model_type == "original":
         npz_path = original_npz
@@ -539,7 +540,7 @@ def main():
             successful_original += 1
         
         # Check if eroded version exists
-        eroded_npz = os.path.join(voxel_path, "voxels_filled_indices_colors_eroded.npz")
+        eroded_npz = os.path.join(voxel_path, "voxels_filled_indices_colors_thinned.npz")
         if os.path.exists(eroded_npz):
             print(f"\n{'='*80}")
             print(f"PROCESSING ERODED MODEL: {voxel_dir}")
