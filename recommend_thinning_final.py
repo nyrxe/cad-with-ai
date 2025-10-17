@@ -217,11 +217,11 @@ class ThinningRecommender:
             )
             
             # Calculate expected savings
-            orig_mass = part_data.get('orig_mass_kg', 0)
-            orig_volume = part_data.get('orig_volume_m3', 0)
+            orig_mass = part_data.get('mass_kg', 0)
+            orig_volume = part_data.get('volume_m3', 0)
             
-            expected_mass_saving = orig_mass * (recommended_reduction / 100) if orig_mass > 0 else 0
-            expected_volume_saving = orig_volume * (recommended_reduction / 100) if orig_volume > 0 else 0
+            expected_mass_saving = round(orig_mass * (recommended_reduction / 100), 6) if orig_mass > 0 else 0
+            expected_volume_saving = round(orig_volume * (recommended_reduction / 100), 8) if orig_volume > 0 else 0
             
             # Track rejections
             if recommended_reduction == 0:

@@ -189,7 +189,11 @@ class SimplePLYProcessor:
         # Update drop area
         self.drop_area.config(bg="#e8f5e8")
         for widget in self.drop_area.winfo_children():
-            widget.config(bg="#e8f5e8", fg="#2d5a2d")
+            try:
+                widget.config(bg="#e8f5e8", fg="#2d5a2d")
+            except:
+                # Some widgets don't support fg option
+                widget.config(bg="#e8f5e8")
     
     def log_message(self, message):
         """Add message to log"""
@@ -257,12 +261,17 @@ class SimplePLYProcessor:
             if not self.run_script("build_pairwise.py"):
                 return
             
-            # Step 8: AI Recommendations
+            # Step 8: Update Original Parts
+            self.log_message("Updating original parts data...")
+            if not self.run_script("create_original_parts.py"):
+                return
+            
+            # Step 9: AI Recommendations
             self.log_message("Running AI predictions...")
             if not self.run_script("recommend_thinning_final.py"):
                 return
             
-            # Step 9: Show Results
+            # Step 10: Show Results
             self.log_message("Pipeline completed successfully!")
             self.show_results()
             
@@ -332,6 +341,10 @@ class SimplePLYProcessor:
                 if result:
                     self.display_results(result)
                     return
+                else:
+                    self.log_message("No AI recommendations found in results file")
+            else:
+                self.log_message("AI recommendations file not found - pipeline may not have completed successfully")
             
             # Fallback to example results
             self.show_example_results()
@@ -463,11 +476,12 @@ except Exception as e:
         """Show example results"""
         self.results_text.config(state="normal")
         self.results_text.delete(1.0, tk.END)
-        self.results_text.insert(tk.END, "Part A can safely be reduced by 12.5%\n")
-        self.results_text.insert(tk.END, "Details: Predicted stress increase: 3.2%")
+        self.results_text.insert(tk.END, "⚠️ No AI recommendations available\n")
+        self.results_text.insert(tk.END, "The AI pipeline may not have completed successfully.\n")
+        self.results_text.insert(tk.END, "Please check the log for errors and try again.")
         self.results_text.config(state="disabled")
         
-        self.log_message("AI Recommendation: Part A can safely be reduced by 12.5%")
+        self.log_message("⚠️ No AI recommendations available - check pipeline completion")
     
     def show_error_results(self):
         """Show error results"""
