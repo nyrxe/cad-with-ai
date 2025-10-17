@@ -7,6 +7,7 @@ Creates unified CSV files comparing thick vs thin model results.
 import os
 import pandas as pd
 import glob
+from safe_print import safe_print
 
 def combine_fea_results(base_dir="voxel_out"):
     """
@@ -15,10 +16,10 @@ def combine_fea_results(base_dir="voxel_out"):
     Args:
         base_dir (str): Base directory containing model results
     """
-    print("=== COMBINING FEA RESULTS ===")
+    safe_print("=== COMBINING FEA RESULTS ===")
     
     if not os.path.exists(base_dir):
-        print(f"Directory not found: {base_dir}")
+        safe_print(f"Directory not found: {base_dir}")
         return
     
     # Find all model directories
@@ -26,10 +27,10 @@ def combine_fea_results(base_dir="voxel_out"):
                   if os.path.isdir(os.path.join(base_dir, d))]
     
     if not model_dirs:
-        print("No model directories found")
+        safe_print("No model directories found")
         return
     
-    print(f"Found {len(model_dirs)} models: {model_dirs}")
+    safe_print(f"Found {len(model_dirs)} models: {model_dirs}")
     
     # Combine part stress summaries
     all_summaries = []
@@ -46,7 +47,7 @@ def combine_fea_results(base_dir="voxel_out"):
             df_summary = pd.read_csv(original_summary)
             df_summary['Model'] = model_dir
             all_summaries.append(df_summary)
-            print(f"Added original results for {model_dir}")
+            safe_print(f"Added original results for {model_dir}")
         
         # Skip detailed results for AI - only need part summaries
         # if os.path.exists(original_detailed):
@@ -62,7 +63,7 @@ def combine_fea_results(base_dir="voxel_out"):
             df_summary = pd.read_csv(eroded_summary)
             df_summary['Model'] = model_dir
             all_summaries.append(df_summary)
-            print(f"Added eroded results for {model_dir}")
+            safe_print(f"Added eroded results for {model_dir}")
         
         # Skip detailed results for AI - only need part summaries
         # if os.path.exists(eroded_detailed):
@@ -75,14 +76,14 @@ def combine_fea_results(base_dir="voxel_out"):
         combined_summary = pd.concat(all_summaries, ignore_index=True)
         summary_path = os.path.join(base_dir, "combined_stress_summary.csv")
         combined_summary.to_csv(summary_path, index=False)
-        print(f"\nCombined summary saved to: {summary_path}")
-        print(f"Total records: {len(combined_summary)}")
+        safe_print(f"\nCombined summary saved to: {summary_path}")
+        safe_print(f"Total records: {len(combined_summary)}")
         
         # Show summary statistics
-        print(f"\nSummary by model type:")
+        safe_print(f"\nSummary by model type:")
         type_counts = combined_summary['Model_Type'].value_counts()
         for model_type, count in type_counts.items():
-            print(f"  {model_type}: {count} parts")
+            safe_print(f"  {model_type}: {count} parts")
     
     # Skip detailed results for AI - only need part summaries
     # if all_detailed:
@@ -96,11 +97,11 @@ def combine_fea_results(base_dir="voxel_out"):
     if all_summaries:
         create_comparison_analysis(combined_summary, base_dir)
     
-    print(f"\n✅ Results combination complete!")
+    safe_print(f"\n[OK] Results combination complete!")
 
 def create_comparison_analysis(df, base_dir):
     """Create comparison analysis between original and eroded models"""
-    print(f"\n=== CREATING COMPARISON ANALYSIS ===")
+    safe_print(f"\n=== CREATING COMPARISON ANALYSIS ===")
     
     # Group by model and part to compare original vs eroded
     comparison_data = []
@@ -120,12 +121,12 @@ def create_comparison_analysis(df, base_dir):
                     'Part': part,
                     'Original_Max_Stress_MPa': original['vonMises_max_Pa'] / 1e6,
                     'Eroded_Max_Stress_MPa': eroded['vonMises_max_Pa'] / 1e6,
-                    'Stress_Change_Percent': ((eroded['vonMises_max_Pa'] - original['vonMises_max_Pa']) / original['vonMises_max_Pa']) * 100,
+                    'Stress_Change_Percent': ((eroded['vonMises_max_Pa'] - original['vonMises_max_Pa']) / original['vonMises_max_Pa'] * 100) if original['vonMises_max_Pa'] != 0 else 0,
                     'Original_Mean_Stress_MPa': original['vonMises_mean_Pa'] / 1e6,
                     'Eroded_Mean_Stress_MPa': eroded['vonMises_mean_Pa'] / 1e6,
                     'Original_Elements': original['ElementCount'],
                     'Eroded_Elements': eroded['ElementCount'],
-                    'Element_Reduction_Percent': ((original['ElementCount'] - eroded['ElementCount']) / original['ElementCount']) * 100
+                    'Element_Reduction_Percent': ((original['ElementCount'] - eroded['ElementCount']) / original['ElementCount'] * 100) if original['ElementCount'] != 0 else 0
                 }
                 comparison_data.append(comparison)
     
@@ -133,24 +134,24 @@ def create_comparison_analysis(df, base_dir):
         comparison_df = pd.DataFrame(comparison_data)
         comparison_path = os.path.join(base_dir, "thick_vs_thin_comparison.csv")
         comparison_df.to_csv(comparison_path, index=False)
-        print(f"Comparison analysis saved to: {comparison_path}")
+        safe_print(f"Comparison analysis saved to: {comparison_path}")
         
         # Show key statistics
-        print(f"\nComparison Statistics:")
-        print(f"Models compared: {len(comparison_df['Model'].unique())}")
-        print(f"Parts compared: {len(comparison_df)}")
+        safe_print(f"\nComparison Statistics:")
+        safe_print(f"Models compared: {len(comparison_df['Model'].unique())}")
+        safe_print(f"Parts compared: {len(comparison_df)}")
         
         avg_stress_change = comparison_df['Stress_Change_Percent'].mean()
         avg_element_reduction = comparison_df['Element_Reduction_Percent'].mean()
         
-        print(f"Average stress change: {avg_stress_change:.1f}%")
-        print(f"Average element reduction: {avg_element_reduction:.1f}%")
+        safe_print(f"Average stress change: {avg_stress_change:.1f}%")
+        safe_print(f"Average element reduction: {avg_element_reduction:.1f}%")
         
         # Show models with highest stress changes
-        print(f"\nTop 5 stress increases (thick → thin):")
+        safe_print(f"\nTop 5 stress increases (thick -> thin):")
         top_increases = comparison_df.nlargest(5, 'Stress_Change_Percent')[['Model', 'Part', 'Stress_Change_Percent']]
         for _, row in top_increases.iterrows():
-            print(f"  {row['Model']} - {row['Part']}: +{row['Stress_Change_Percent']:.1f}%")
+            safe_print(f"  {row['Model']} - {row['Part']}: +{row['Stress_Change_Percent']:.1f}%")
 
 def main():
     """Main function"""

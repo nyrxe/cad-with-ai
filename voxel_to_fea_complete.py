@@ -203,7 +203,7 @@ def run_calculix(input_path, output_dir, num_nodes=None, num_elements=None):
         print(f"Model size: {num_nodes} nodes, {num_elements} elements")
         
         if num_nodes > 10000 or num_elements > 10000:
-            print(f"⚠️  Large model detected: {num_nodes} nodes, {num_elements} elements")
+            print(f"WARNING: Large model detected: {num_nodes} nodes, {num_elements} elements")
             print("   This may take 10-30 minutes to solve...")
             
             # Ask user if they want to continue (COMMENTED OUT FOR AI)
@@ -451,17 +451,17 @@ def process_single_model(model_dir, model_type="original"):
             if stress_data:
                 # Analyze parts (with model type in results)
                 analyze_parts(stress_data, colors, uniq_colors, fea_output_dir, model_type)
-                print(f"\n✅ Complete analysis finished for {os.path.basename(model_dir)} ({model_type})")
+                print(f"\nOK: Complete analysis finished for {os.path.basename(model_dir)} ({model_type})")
                 return True
             else:
-                print(f"\n❌ No stress data extracted for {os.path.basename(model_dir)} ({model_type})")
+                print(f"\nERROR: No stress data extracted for {os.path.basename(model_dir)} ({model_type})")
                 return False
         else:
-            print(f"\n❌ FEA analysis failed for {os.path.basename(model_dir)} ({model_type})")
+            print(f"\nERROR: FEA analysis failed for {os.path.basename(model_dir)} ({model_type})")
             return False
             
     except Exception as e:
-        print(f"\n❌ Error processing {os.path.basename(model_dir)} ({model_type}): {e}")
+        print(f"\nERROR: Error processing {os.path.basename(model_dir)} ({model_type}): {e}")
         return False
 
 def test_voxel_to_elem_nodes():
@@ -492,11 +492,11 @@ def test_voxel_to_elem_nodes():
     expected_nodes = (1, 2, 3, 4, 5, 6, 7, 8)
     
     if test_nodes == expected_nodes:
-        print("✅ Voxel to element node mapping test PASSED")
-        print(f"   Voxel (1,1,1) → Nodes {test_nodes}")
+        print("OK: Voxel to element node mapping test PASSED")
+        print(f"   Voxel (1,1,1) -> Nodes {test_nodes}")
         return True
     else:
-        print("❌ Voxel to element node mapping test FAILED")
+        print("ERROR: Voxel to element node mapping test FAILED")
         print(f"   Expected: {expected_nodes}")
         print(f"   Got: {test_nodes}")
         return False
@@ -558,12 +558,12 @@ def main():
     print(f"{'='*80}")
     
     if successful_eroded > 0:
-        print(f"\n📊 COMPARISON ANALYSIS AVAILABLE:")
+        print(f"\nCOMPARISON ANALYSIS AVAILABLE:")
         print(f"   - Original models: {successful_original} completed")
         print(f"   - Eroded models: {successful_eroded} completed")
         print(f"   - Check CSV files for thick vs thin comparison")
     else:
-        print(f"\n💡 TIP: Create eroded versions for comparison:")
+        print(f"\nTIP: Create eroded versions for comparison:")
         print(f"   python voxel_erosion.py")
         print(f"   Then run this analysis again to compare thick vs thin models")
 

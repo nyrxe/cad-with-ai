@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 import os
 from collections import defaultdict
+from safe_print import safe_print
 
 def load_existing_csv(csv_path="voxel_out/combined_stress_summary.csv"):
     """Load the existing stress summary CSV"""
@@ -130,7 +131,7 @@ def analyze_results(df):
     valid_df = df[df['mass_kg'].notna()].copy()
     
     if len(valid_df) == 0:
-        print("❌ No valid calculations found!")
+        print("[X] No valid calculations found!")
         return
     
     print(f"Valid calculations: {len(valid_df)} rows")
@@ -266,7 +267,7 @@ def create_visualizations(df):
     
     plt.tight_layout()
     plt.savefig('mass_volume_analysis.png', dpi=300, bbox_inches='tight')
-    plt.show()
+    plt.close()  # Close the figure instead of showing it
     
     print("Visualizations saved as 'mass_volume_analysis.png'")
 
@@ -298,7 +299,7 @@ def main():
     # Save results
     output_path = "dataset_with_mass_volume.csv"
     df.to_csv(output_path, index=False)
-    print(f"\n✅ Results saved to: {output_path}")
+    print(f"\n[OK] Results saved to: {output_path}")
     
     # Final summary
     successful_models = len(pitch_data)
@@ -306,7 +307,7 @@ def main():
     successful_rows = df['mass_kg'].notna().sum()
     total_rows = len(df)
     
-    print(f"\n📊 FINAL SUMMARY:")
+    print(f"\n[#] FINAL SUMMARY:")
     print(f"  Models with pitch data: {successful_models}/{total_models}")
     print(f"  Rows with mass/volume: {successful_rows}/{total_rows}")
     print(f"  Mean pitch: {df['pitch_m'].mean():.6f} m")

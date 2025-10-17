@@ -19,81 +19,46 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
 # Virtual Environment
 .venv/
 venv/
 ENV/
 env/
-.env
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
 
-# CalculiX temporary files
---version.*
-*.cvg
-*.sta
-*.12d
-*.frd
-spooles.out
-
-# Generated output directories
+# Project specific
 voxel_out/
-
-# Large output files (optional - uncomment if you don't want to track them)
-# voxel_out/
-# *.ply
-# *.npz
-# *.dat
-# *.inp
-
-# Generated datasets and results
+input/
+*.ply
 *.csv
-dataset_with_mass_volume.csv
-pairwise_finite.csv
-pairwise_eda_clipped.csv
-pairwise_thinning_dataset.csv
-combined_stress_summary.csv
-thick_vs_thin_comparison.csv
-
-# AI/ML models and data
-ai_models/
-*.pkl
-pairwise_thinning_model.pkl
-
-# Generated visualizations
+*.npz
 *.png
 *.jpg
 *.jpeg
-mass_volume_analysis.png
-pairwise_thinning_analysis.png
-pairwise_thinning_with_mass_analysis.png
-enhanced_thickness_optimization_analysis.png
+*.gif
 
-# Temporary and cache files
-*.tmp
-*.temp
-*.log
-*.out
-
-# Large data files
-*.ply
-*.npz
-*.dat
-*.inp
-*.frd
+# CalculiX temporary files
 *.cvg
+*.dat
 *.sta
+*.frd
+*.inp
 *.12d
+spooles.out
 
-# Results (optional - uncomment if you don't want to track results)
-# part_detailed_results.csv
+# AI Models (keep structure but ignore large files)
+ai_models/*.pkl
+
+# Logs
+*.log

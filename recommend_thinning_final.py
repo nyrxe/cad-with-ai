@@ -10,6 +10,7 @@ import joblib
 import os
 import warnings
 import argparse
+from safe_print import safe_print
 warnings.filterwarnings('ignore')
 
 class ThinningRecommender:
@@ -33,7 +34,7 @@ class ThinningRecommender:
                 raise FileNotFoundError(f"Model not found: {model_path}")
             
             self.model = joblib.load(model_path)
-            print(f"✅ Loaded GradientBoosting model from {model_path}")
+            safe_print(f"[OK] Loaded GradientBoosting model from {model_path}")
             
             # Load scaler
             scaler_path = os.path.join(self.model_dir, "scalers.pkl")
@@ -42,7 +43,7 @@ class ThinningRecommender:
             
             scalers = joblib.load(scaler_path)
             self.scaler = scalers['main']
-            print(f"✅ Loaded scaler from {scaler_path}")
+            safe_print(f"[OK] Loaded scaler from {scaler_path}")
             
             # Load feature columns (canonical order from training)
             feature_columns_path = os.path.join(self.model_dir, "feature_columns.pkl")
@@ -50,19 +51,19 @@ class ThinningRecommender:
                 raise FileNotFoundError(f"Feature columns not found: {feature_columns_path}")
             
             self.feature_columns = joblib.load(feature_columns_path)
-            print(f"✅ Loaded feature columns from {feature_columns_path}")
+            safe_print(f"[OK] Loaded feature columns from {feature_columns_path}")
             print(f"  Features: {self.feature_columns}")
             
             # Sanity check: scaler should match feature columns
             if hasattr(self.scaler, 'n_features_in_'):
                 if self.scaler.n_features_in_ != len(self.feature_columns):
                     raise ValueError(f"Scaler expects {self.scaler.n_features_in_} features, but {len(self.feature_columns)} provided")
-                print(f"✅ Scaler feature count matches: {self.scaler.n_features_in_}")
+                safe_print(f"[OK] Scaler feature count matches: {self.scaler.n_features_in_}")
             
             return True
             
         except Exception as e:
-            print(f"❌ Error loading models: {e}")
+            safe_print(f"[X] Error loading models: {e}")
             print("Please run enhanced_thickness_optimizer.py first to train the models.")
             return False
     
@@ -71,7 +72,7 @@ class ThinningRecommender:
         print(f"\n=== LOADING ORIGINAL PARTS: {csv_path} ===")
         
         if not os.path.exists(csv_path):
-            print(f"❌ File not found: {csv_path}")
+            safe_print(f"[X] File not found: {csv_path}")
             return None
         
         df = pd.read_csv(csv_path)
@@ -83,7 +84,7 @@ class ThinningRecommender:
         missing_cols = [col for col in required_cols if col not in df.columns]
         
         if missing_cols:
-            print(f"❌ Missing required columns: {missing_cols}")
+            safe_print(f"[X] Missing required columns: {missing_cols}")
             return None
         
         # Check for optional columns
@@ -243,9 +244,9 @@ class ThinningRecommender:
             if processed_count % 10 == 0:
                 print(f"  Processed {processed_count}/{len(df)} parts...")
         
-        print(f"✅ Processed {processed_count} parts successfully")
-        print(f"❌ Rejected {rejected_count} parts (no safe thinning possible)")
-        print(f"⚠️  Skipped {skipped_count} parts (missing features)")
+        safe_print(f"[OK] Processed {processed_count} parts successfully")
+        safe_print(f"[X] Rejected {rejected_count} parts (no safe thinning possible)")
+        safe_print(f"[!] Skipped {skipped_count} parts (missing features)")
         
         return recommendations, processed_count, rejected_count, skipped_count
     
@@ -337,17 +338,15 @@ def main():
     recommender = ThinningRecommender()
     
     if not recommender.model or not recommender.scaler or not recommender.feature_columns:
-        print("❌ Failed to load models. Exiting.")
+        safe_print("[X] Failed to load models. Exiting.")
         return
     
-    # Load original parts
-    original_parts_path = input("Enter path to original parts CSV (or press Enter for 'original_parts.csv'): ").strip()
-    if not original_parts_path:
-        original_parts_path = "original_parts.csv"
+    # Load original parts (use default path for automation)
+    original_parts_path = "original_parts.csv"
     
     df = recommender.load_original_parts(original_parts_path)
     if df is None:
-        print("❌ Failed to load original parts. Exiting.")
+        safe_print("[X] Failed to load original parts. Exiting.")
         return
     
     # Define reduction steps (0% to 40% in 2.5% steps)
@@ -362,7 +361,7 @@ def main():
         output_path = "thinning_recommendations_final.csv"
         df_rec = pd.DataFrame(recommendations)
         df_rec.to_csv(output_path, index=False)
-        print(f"\n✅ Recommendations saved to: {output_path}")
+        safe_print(f"\n[OK] Recommendations saved to: {output_path}")
         
         # Print summary
         recommender.print_summary_stats(recommendations, processed_count, rejected_count, skipped_count)
@@ -371,7 +370,7 @@ def main():
         if args.debug:
             recommender.validation_debug(df, reduction_steps)
     else:
-        print("❌ No recommendations generated")
+        safe_print("[X] No recommendations generated")
 
 if __name__ == "__main__":
     main()
