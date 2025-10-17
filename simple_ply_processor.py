@@ -28,7 +28,7 @@ class SimplePLYProcessor:
         """Setup the user interface"""
         # Configure window
         self.root.configure(bg="#f8f9fa")
-        self.root.geometry("950x850")
+        self.root.geometry("1200x1000")
         
         # Configure styles
         style = ttk.Style()
@@ -108,23 +108,28 @@ class SimplePLYProcessor:
         self.progress = ttk.Progressbar(progress_frame, mode='indeterminate')
         self.progress.pack(fill=tk.X, pady=(5, 0))
         
-        # Log area with modern styling
+        # Log area with modern styling and larger size
         log_frame = ttk.LabelFrame(main_frame, text="📊 Processing Log", padding="15")
         log_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
         
-        self.log_text = scrolledtext.ScrolledText(log_frame, height=6, width=85, wrap=tk.WORD,
-                                                 font=("Consolas", 9), bg="#f8f9fa", 
+        self.log_text = scrolledtext.ScrolledText(log_frame, height=10, width=100, wrap=tk.WORD,
+                                                 font=("Consolas", 10), bg="#f8f9fa", 
                                                  fg="#2c3e50", relief="flat", bd=0)
         self.log_text.pack(fill=tk.BOTH, expand=True)
         
-        # Results area with success styling
+        # Results area with success styling and scrollbars
         self.results_frame = ttk.LabelFrame(main_frame, text="🎯 AI Recommendations", padding="15")
-        self.results_frame.pack(fill=tk.X)
+        self.results_frame.pack(fill=tk.BOTH, expand=True)
         
-        self.results_text = tk.Text(self.results_frame, height=5, width=85, wrap=tk.WORD, 
-                                  font=("Segoe UI", 10), bg="#f0f8ff", fg="#2c3e50", 
+        # Create a frame for the results text with scrollbar
+        results_container = tk.Frame(self.results_frame)
+        results_container.pack(fill=tk.BOTH, expand=True)
+        
+        # Results text with scrollbar
+        self.results_text = scrolledtext.ScrolledText(results_container, height=8, width=100, wrap=tk.WORD, 
+                                  font=("Segoe UI", 11), bg="#f0f8ff", fg="#2c3e50", 
                                   state="disabled", relief="flat", bd=0)
-        self.results_text.pack(fill=tk.X)
+        self.results_text.pack(fill=tk.BOTH, expand=True)
     
     def check_environment(self):
         """Check Python environment and dependencies"""
@@ -473,7 +478,11 @@ except Exception as e:
         if isinstance(results, list):
             # Multiple results
             total_mass_saving = 0
-            for i, result in enumerate(results):
+            optimized_parts = 0
+            
+            self.results_text.insert(tk.END, f"🎉 AI Analysis Complete! Found {len(results)} parts:\n\n")
+            
+            for i, result in enumerate(results, 1):
                 part_id = result['part_id']
                 reduction = result['reduction']
                 stress_change = result['stress_change']
@@ -481,13 +490,23 @@ except Exception as e:
                 total_mass_saving += mass_saving
                 
                 if reduction > 0:
-                    self.results_text.insert(tk.END, f"Part {part_id}: {reduction:.1f}% reduction\n")
-                    self.results_text.insert(tk.END, f"  Stress change: {stress_change:.1f}%, Mass saving: {mass_saving:.3f} kg\n\n")
+                    optimized_parts += 1
+                    self.results_text.insert(tk.END, f"📋 Part {i}: {part_id}\n")
+                    self.results_text.insert(tk.END, f"   ✅ Can safely be reduced by {reduction:.1f}%\n")
+                    self.results_text.insert(tk.END, f"   📊 Predicted stress change: {stress_change:.1f}%\n")
+                    self.results_text.insert(tk.END, f"   💰 Expected mass saving: {mass_saving:.3f} kg\n\n")
                 else:
-                    self.results_text.insert(tk.END, f"Part {part_id}: No thinning recommended\n\n")
+                    self.results_text.insert(tk.END, f"📋 Part {i}: {part_id}\n")
+                    self.results_text.insert(tk.END, f"   ⚠️ No thinning recommended (safety constraints)\n\n")
             
-            self.results_text.insert(tk.END, f"TOTAL MASS SAVING: {total_mass_saving:.3f} kg")
-            self.log_message(f"AI Recommendations: {len(results)} parts analyzed, {total_mass_saving:.3f} kg total savings")
+            self.results_text.insert(tk.END, f"🎯 SUMMARY:\n")
+            self.results_text.insert(tk.END, f"   Parts optimized: {optimized_parts}/{len(results)}\n")
+            self.results_text.insert(tk.END, f"   Total mass saving: {total_mass_saving:.3f} kg\n")
+            if optimized_parts > 0:
+                avg_reduction = sum(r['reduction'] for r in results if r['reduction'] > 0) / optimized_parts
+                self.results_text.insert(tk.END, f"   Average reduction: {avg_reduction:.1f}%\n")
+            
+            self.log_message(f"AI Recommendations: {len(results)} parts analyzed, {optimized_parts} optimized, {total_mass_saving:.3f} kg total savings")
         else:
             # Single result
             part_id = results['part_id']
