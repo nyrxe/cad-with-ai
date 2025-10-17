@@ -28,7 +28,29 @@ class SimplePLYProcessor:
         """Setup the user interface"""
         # Configure window
         self.root.configure(bg="#f8f9fa")
-        self.root.geometry("1200x1000")
+        self.root.geometry("1200x800")
+        
+        # Create main scrollable frame
+        main_canvas = tk.Canvas(self.root, bg="#f8f9fa")
+        main_scrollbar = ttk.Scrollbar(self.root, orient="vertical", command=main_canvas.yview)
+        scrollable_frame = ttk.Frame(main_canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all"))
+        )
+        
+        main_canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        main_canvas.configure(yscrollcommand=main_scrollbar.set)
+        
+        # Pack scrollable area
+        main_canvas.pack(side="left", fill="both", expand=True)
+        main_scrollbar.pack(side="right", fill="y")
+        
+        # Bind mouse wheel scrolling
+        def _on_mousewheel(event):
+            main_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        main_canvas.bind_all("<MouseWheel>", _on_mousewheel)
         
         # Configure styles
         style = ttk.Style()
@@ -40,7 +62,7 @@ class SimplePLYProcessor:
         style.configure('Primary.TButton', font=('Segoe UI', 12, 'bold'))
         
         # Main frame
-        main_frame = ttk.Frame(self.root, padding="30")
+        main_frame = ttk.Frame(scrollable_frame, padding="30")
         main_frame.pack(fill=tk.BOTH, expand=True)
         
         # Header section
@@ -125,9 +147,9 @@ class SimplePLYProcessor:
         results_container = tk.Frame(self.results_frame)
         results_container.pack(fill=tk.BOTH, expand=True)
         
-        # Results text with scrollbar
-        self.results_text = scrolledtext.ScrolledText(results_container, height=8, width=100, wrap=tk.WORD, 
-                                  font=("Segoe UI", 11), bg="#f0f8ff", fg="#2c3e50", 
+        # Results text with scrollbar - MUCH BIGGER
+        self.results_text = scrolledtext.ScrolledText(results_container, height=20, width=120, wrap=tk.WORD, 
+                                  font=("Segoe UI", 12), bg="#f0f8ff", fg="#2c3e50", 
                                   state="disabled", relief="flat", bd=0)
         self.results_text.pack(fill=tk.BOTH, expand=True)
     
