@@ -263,7 +263,7 @@ class SimplePLYProcessor:
             
             # Step 8: Update Original Parts
             self.log_message("Updating original parts data...")
-            if not self.run_script("create_original_parts.py"):
+            if not self.update_original_parts():
                 return
             
             # Step 9: AI Recommendations
@@ -328,6 +328,42 @@ class SimplePLYProcessor:
                 
         except Exception as e:
             self.log_message(f"Error running {script_name}: {str(e)}")
+            return False
+    
+    def update_original_parts(self):
+        """Update original_parts.csv with latest data"""
+        try:
+            import pandas as pd
+            
+            # Load the dataset
+            if not os.path.exists("dataset_with_mass_volume.csv"):
+                self.log_message("ERROR: dataset_with_mass_volume.csv not found")
+                return False
+            
+            df = pd.read_csv("dataset_with_mass_volume.csv")
+            
+            # Filter for original parts only
+            original_df = df[df['Model_Type'] == 'original'].copy()
+            
+            # Create the required columns
+            original_df['model_id'] = original_df['Model']
+            original_df['part_id'] = original_df['Part']
+            original_df['orig_el'] = original_df['ElementCount']
+            original_df['orig_mean'] = original_df['vonMises_mean_Pa']
+            original_df['orig_std'] = original_df['vonMises_std_Pa']
+            
+            # Select only the required columns
+            required_cols = ['model_id', 'part_id', 'orig_el', 'orig_mean', 'orig_std', 'pitch_m', 'volume_m3', 'density_kg_m3', 'mass_kg']
+            original_parts = original_df[required_cols].copy()
+            
+            # Save the file
+            original_parts.to_csv("original_parts.csv", index=False)
+            
+            self.log_message(f"Updated original_parts.csv with {len(original_parts)} parts")
+            return True
+            
+        except Exception as e:
+            self.log_message(f"Error updating original parts: {e}")
             return False
     
     def show_results(self):
