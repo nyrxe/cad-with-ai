@@ -26,6 +26,7 @@ class EnhancedThicknessOptimizer:
         self.scalers = {}
         self.feature_importance = {}
         self.results = {}
+        self.feature_columns = None
         
     def load_pairwise_data(self, csv_path="pairwise_finite.csv"):
         """Load pairwise finite dataset"""
@@ -96,6 +97,9 @@ class EnhancedThicknessOptimizer:
         
         print(f"Feature matrix shape: {X.shape}")
         print(f"Target shape: {y.shape}")
+        
+        # Store feature columns for later use
+        self.feature_columns = feature_columns
         
         return X, y, feature_columns, df
     
@@ -306,6 +310,11 @@ class EnhancedThicknessOptimizer:
         scaler_path = os.path.join(save_dir, "scalers.pkl")
         joblib.dump(self.scalers, scaler_path)
         print(f"  Saved scalers to {scaler_path}")
+        
+        # Save feature columns for the recommendation system
+        feature_columns_path = os.path.join(save_dir, "feature_columns.pkl")
+        joblib.dump(self.feature_columns, feature_columns_path)
+        print(f"  Saved feature columns to {feature_columns_path}")
         
         # Save feature importance
         if self.feature_importance:
