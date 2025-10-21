@@ -117,6 +117,17 @@ class SimplePLYProcessor:
                                      font=("Segoe UI", 10, "bold"), foreground="#27ae60")
         self.file_display.pack(side=tk.LEFT, padx=(10, 0))
         
+        # AI Thinning Options
+        thinning_frame = ttk.LabelFrame(main_frame, text="🔧 AI Thinning Options", padding="15")
+        thinning_frame.pack(fill=tk.X, pady=(0, 20))
+        
+        self.apply_thinning_var = tk.BooleanVar(value=True)  # Default ON
+        self.apply_thinning_cb = ttk.Checkbutton(thinning_frame, 
+                                               text="Apply AI thinning to voxels and export modified geometry",
+                                               variable=self.apply_thinning_var, 
+                                               style='Part.TCheckbutton')
+        self.apply_thinning_cb.pack(anchor=tk.W, pady=(0, 10))
+        
         # Process button with modern styling
         self.process_btn = ttk.Button(main_frame, text="🚀 Run AI Pipeline", 
                                     command=self.run_pipeline, state="disabled", style='Primary.TButton')
@@ -418,6 +429,13 @@ class SimplePLYProcessor:
                 shutil.copy2(backup_path, "original_parts.csv")
                 self.progress.stop()
                 return
+            
+            # Apply AI thinning if enabled
+            if self.apply_thinning_var.get():
+                self.log_message("Applying AI thinning to voxels...")
+                if not self.run_script("apply_ai_thinning.py"):
+                    self.log_message("Warning: AI thinning application failed, but continuing with results...")
+            
             # Restore full file
             shutil.copy2(backup_path, "original_parts.csv")
             # Show results
@@ -622,6 +640,9 @@ except Exception as e:
             
             self.results_text.insert(tk.END, f"🎉 AI Analysis Complete! Found {len(results)} parts:\n\n")
             
+            # Load thinning application report if available
+            thinning_report = self.load_thinning_report()
+            
             for i, result in enumerate(results, 1):
                 part_id = result['part_id']
                 reduction = result['reduction']
@@ -632,12 +653,27 @@ except Exception as e:
                 if reduction > 0:
                     optimized_parts += 1
                     self.results_text.insert(tk.END, f"📋 Part {i}: {part_id}\n")
-                    self.results_text.insert(tk.END, f"   ✅ Can safely be reduced by {reduction:.1f}%\n")
-                    self.results_text.insert(tk.END, f"   📊 Predicted stress change: {stress_change:.1f}%\n")
-                    self.results_text.insert(tk.END, f"   💰 Expected mass saving: {mass_saving:.3f} kg\n\n")
+                    self.results_text.insert(tk.END, f"   ✅ Target reduction: {reduction:.1f}%\n")
+                    
+                    # Show achieved reduction if thinning was applied
+                    if thinning_report and part_id in thinning_report:
+                        achieved = thinning_report[part_id]['achieved_pct']
+                        stop_reason = thinning_report[part_id]['stop_reason']
+                        if achieved > 0:
+                            self.results_text.insert(tk.END, f"   🎯 Achieved reduction: {achieved:.1f}%")
+                            if stop_reason != "target_met":
+                                self.results_text.insert(tk.END, f" (bound: {stop_reason})")
+                            self.results_text.insert(tk.END, "\n")
+                        else:
+                            self.results_text.insert(tk.END, f"   ⚠️ No thinning applied ({stop_reason})\n")
+                    else:
+                        self.results_text.insert(tk.END, f"   📊 Predicted stress change: {stress_change:.1f}%\n")
+                        self.results_text.insert(tk.END, f"   💰 Expected mass saving: {mass_saving:.3f} kg\n")
                 else:
                     self.results_text.insert(tk.END, f"📋 Part {i}: {part_id}\n")
-                    self.results_text.insert(tk.END, f"   ⚠️ No thinning recommended (safety constraints)\n\n")
+                    self.results_text.insert(tk.END, f"   ⚠️ No thinning recommended (safety constraints)\n")
+                
+                self.results_text.insert(tk.END, "\n")
             
             self.results_text.insert(tk.END, f"🎯 SUMMARY:\n")
             self.results_text.insert(tk.END, f"   Parts optimized: {optimized_parts}/{len(results)}\n")
@@ -645,6 +681,14 @@ except Exception as e:
             if optimized_parts > 0:
                 avg_reduction = sum(r['reduction'] for r in results if r['reduction'] > 0) / optimized_parts
                 self.results_text.insert(tk.END, f"   Average reduction: {avg_reduction:.1f}%\n")
+            
+            # Show thinning application status
+            if self.apply_thinning_var.get():
+                if thinning_report:
+                    applied_parts = len([r for r in thinning_report.values() if r['achieved_pct'] > 0])
+                    self.results_text.insert(tk.END, f"   🔧 Thinning applied: {applied_parts} parts\n")
+                else:
+                    self.results_text.insert(tk.END, f"   🔧 Thinning: Not applied (no report found)\n")
             
             self.log_message(f"AI Recommendations: {len(results)} parts analyzed, {optimized_parts} optimized, {total_mass_saving:.3f} kg total savings")
         else:
@@ -666,6 +710,17 @@ except Exception as e:
             self.log_message(f"AI Recommendation: {recommendation}")
         
         self.results_text.config(state="disabled")
+    
+    def load_thinning_report(self):
+        """Load thinning application report if available"""
+        try:
+            if os.path.exists("thinning_apply_report.csv"):
+                import pandas as pd
+                df = pd.read_csv("thinning_apply_report.csv")
+                return {row['part_id']: row.to_dict() for _, row in df.iterrows()}
+        except Exception as e:
+            self.log_message(f"Could not load thinning report: {e}")
+        return None
 
     def show_example_results(self):
         """Show example results"""
