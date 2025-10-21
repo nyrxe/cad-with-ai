@@ -447,31 +447,48 @@ class AIThinningApplier:
                 return
             
             # Build dense grid from sparse indices
+            # Axis order: (z, y, x) - document and keep consistent
             imin, jmin, kmin = indices.min(axis=0)
             imax, jmax, kmax = indices.max(axis=0)
-            grid_shape = (imax - imin + 1, jmax - jmin + 1, kmax - kmin + 1)
+            grid_shape = (kmax - kmin + 1, jmax - jmin + 1, imax - imin + 1)  # (z, y, x)
             offset = np.array([imin, jmin, kmin])
             
-            # Create dense occupancy grid
-            dense_grid = np.zeros(grid_shape, dtype=bool)
+            # Create dense occupancy grid with 1-voxel padding border
+            pad_border_voxels = 1
+            padded_shape = (grid_shape[0] + 2*pad_border_voxels, 
+                           grid_shape[1] + 2*pad_border_voxels, 
+                           grid_shape[2] + 2*pad_border_voxels)
+            dense_grid = np.zeros(padded_shape, dtype=bool)
+            
+            # Fill occupied voxels in padded grid
             for idx in indices:
                 x, y, z = idx - offset
-                if (0 <= x < grid_shape[0] and 0 <= y < grid_shape[1] and 0 <= z < grid_shape[2]):
-                    dense_grid[x, y, z] = True
+                if (0 <= x < grid_shape[2] and 0 <= y < grid_shape[1] and 0 <= z < grid_shape[0]):
+                    # Add padding offset
+                    z_pad = z + pad_border_voxels
+                    y_pad = y + pad_border_voxels  
+                    x_pad = x + pad_border_voxels
+                    dense_grid[z_pad, y_pad, x_pad] = True
             
             # Generate marching cubes mesh
             try:
                 vertices, faces, normals, values = marching_cubes(dense_grid, level=0.5, spacing=(pitch, pitch, pitch))
                 
-                # Apply offset to vertices
+                # Remove padding offset from vertices
+                vertices -= pad_border_voxels * pitch
+                
+                # Apply original offset to vertices
                 vertices += offset * pitch
                 
-                # Apply transform to vertices
+                # Apply transform to vertices (once, after marching cubes)
                 homo_vertices = np.hstack([vertices, np.ones((len(vertices), 1))])
                 world_vertices = (transform @ homo_vertices.T).T[:, :3]
                 
                 # Create trimesh object
                 mesh = trimesh.Trimesh(vertices=world_vertices, faces=faces)
+                
+                # Postprocess mesh for watertight surface
+                mesh = self.postprocess_mesh(mesh)
                 
                 # Apply colors if available
                 if colors is not None and len(colors) > 0:
@@ -507,6 +524,9 @@ class AIThinningApplier:
                 
                 # Also export voxel version (point cloud and boxes)
                 self.export_voxel_visualization(model_id, voxel_out_dir, indices, colors, pitch, transform)
+                
+                # Export solid voxel mesh (no gaps, internal faces culled)
+                self.export_solid_voxels(model_id, voxel_out_dir, indices, colors, pitch, transform)
                 
             except Exception as e:
                 logger.warning(f"Marching cubes failed: {e}")
@@ -606,6 +626,128 @@ class AIThinningApplier:
             
         except Exception as e:
             logger.warning(f"Failed to export voxel visualization: {e}")
+    
+    def postprocess_mesh(self, mesh):
+        """Postprocess mesh for watertight surface"""
+        try:
+            # Remove degenerate faces
+            mesh.remove_degenerate_faces()
+            
+            # Merge duplicate vertices
+            mesh.merge_vertices()
+            
+            # Fix normals and winding
+            mesh.fix_normals()
+            
+            # Remove non-manifold edges
+            mesh.remove_duplicate_faces()
+            
+            # Fill small holes
+            mesh.fill_holes()
+            
+            # Keep largest component only
+            if len(mesh.split()) > 1:
+                components = mesh.split()
+                largest_component = max(components, key=len)
+                mesh = largest_component
+            
+            return mesh
+            
+        except Exception as e:
+            logger.warning(f"Mesh postprocessing failed: {e}")
+            return mesh
+    
+    def export_solid_voxels(self, model_id, voxel_out_dir, indices, colors, pitch, transform):
+        """Export solid voxel mesh (no gaps, internal faces culled)"""
+        try:
+            import trimesh
+            
+            if len(indices) == 0:
+                return
+            
+            # Convert indices to world coordinates
+            homo_coords = np.hstack([indices, np.ones((len(indices), 1))])
+            world_coords = (transform @ homo_coords.T).T[:, :3]
+            
+            # Build voxel grid for face culling
+            voxel_set = set()
+            for coord in world_coords:
+                voxel_set.add(tuple(coord))
+            
+            # Export solid voxel boxes (exact pitch, no gaps)
+            solid_ply = os.path.join(voxel_out_dir, model_id, "voxels_thinned_solid.ply")
+            box_vertices = []
+            box_faces = []
+            face_offset = 0
+            
+            for i, (x, y, z) in enumerate(world_coords):
+                # Create box vertices (8 corners of a cube) - exact pitch
+                half_size = pitch / 2
+                box_verts = np.array([
+                    [x - half_size, y - half_size, z - half_size],
+                    [x + half_size, y - half_size, z - half_size],
+                    [x + half_size, y + half_size, z - half_size],
+                    [x - half_size, y + half_size, z - half_size],
+                    [x - half_size, y - half_size, z + half_size],
+                    [x + half_size, y - half_size, z + half_size],
+                    [x + half_size, y + half_size, z + half_size],
+                    [x - half_size, y + half_size, z + half_size]
+                ])
+                
+                # Box faces (12 triangles for 6 faces)
+                box_faces_this = np.array([
+                    [0, 1, 2], [0, 2, 3],  # bottom
+                    [4, 7, 6], [4, 6, 5],  # top
+                    [0, 4, 5], [0, 5, 1],  # front
+                    [2, 6, 7], [2, 7, 3],  # back
+                    [0, 3, 7], [0, 7, 4],  # left
+                    [1, 5, 6], [1, 6, 2]   # right
+                ]) + face_offset
+                
+                # Cull internal faces (where two voxels touch)
+                faces_to_keep = []
+                for face_idx, face in enumerate(box_faces_this):
+                    # Check if this face is internal (touching another voxel)
+                    if len(face) >= 3:  # Ensure we have at least 3 vertices
+                        face_center = np.mean(box_verts[face], axis=0)
+                        face_normal = np.cross(box_verts[face[1]] - box_verts[face[0]], 
+                                            box_verts[face[2]] - box_verts[face[0]])
+                        face_normal = face_normal / np.linalg.norm(face_normal)
+                        
+                        # Check if there's a voxel in the direction of the normal
+                        neighbor_pos = face_center + face_normal * pitch * 0.1
+                        neighbor_voxel = tuple(np.round(neighbor_pos / pitch) * pitch)
+                        
+                        if neighbor_voxel not in voxel_set:
+                            faces_to_keep.append(face)
+                
+                if faces_to_keep:
+                    box_vertices.append(box_verts)
+                    box_faces.append(np.array(faces_to_keep))
+                    face_offset += 8
+            
+            if box_vertices:
+                all_vertices = np.vstack(box_vertices)
+                all_faces = np.vstack(box_faces)
+                
+                # Create mesh
+                mesh = trimesh.Trimesh(vertices=all_vertices, faces=all_faces)
+                
+                # Apply colors if available
+                if colors is not None and len(colors) > 0:
+                    try:
+                        if len(colors) == len(indices):
+                            face_colors = np.repeat(colors, len(all_faces) // len(indices), axis=0)
+                            if len(face_colors) == len(all_faces):
+                                mesh.visual.face_colors = face_colors
+                    except Exception as e:
+                        logger.warning(f"Color assignment failed: {e}")
+                
+                mesh.export(solid_ply)
+                logger.info(f"Exported solid voxel mesh: {solid_ply}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to export solid voxels: {e}")
 
 def main():
     """Main function to apply AI thinning to all models"""
