@@ -60,6 +60,8 @@ class SimplePLYProcessor:
         style.configure('Success.TLabel', font=('Segoe UI', 11, 'bold'), foreground='#27ae60')
         style.configure('Info.TLabel', font=('Segoe UI', 10), foreground='#3498db')
         style.configure('Primary.TButton', font=('Segoe UI', 12, 'bold'))
+        style.configure('Accent.TButton', font=('Segoe UI', 11, 'bold'))
+        style.configure('Part.TCheckbutton', font=('Segoe UI', 11, 'bold'))
         
         # Main frame
         main_frame = ttk.Frame(scrollable_frame, padding="30")
@@ -138,6 +140,25 @@ class SimplePLYProcessor:
                                                  font=("Consolas", 10), bg="#f8f9fa", 
                                                  fg="#2c3e50", relief="flat", bd=0)
         self.log_text.pack(fill=tk.BOTH, expand=True)
+        
+        # Part selection area
+        select_frame = ttk.LabelFrame(main_frame, text="🧩 Select Parts for AI Recommendation", padding="15")
+        select_frame.pack(fill=tk.X, pady=(0, 15))
+        # Scrollable checkbox list
+        self.part_vars = {}  # part_id -> tk.BooleanVar
+        part_canvas = tk.Canvas(select_frame, highlightthickness=0, height=180, bg="#ffffff")
+        part_scroll = ttk.Scrollbar(select_frame, orient='vertical', command=part_canvas.yview)
+        part_canvas.configure(yscrollcommand=part_scroll.set)
+        self.part_container = ttk.Frame(part_canvas)
+        part_canvas.create_window((0, 0), window=self.part_container, anchor='nw')
+        def _pcfg(_):
+            part_canvas.configure(scrollregion=part_canvas.bbox('all'))
+            part_canvas.itemconfig(1, width=part_canvas.winfo_width())
+        self.part_container.bind('<Configure>', _pcfg)
+        part_canvas.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        part_scroll.pack(side=tk.LEFT, fill=tk.Y, padx=(6,0))
+        self.run_selected_btn = ttk.Button(select_frame, text="Run AI on Selected Parts", style='Accent.TButton', command=self.run_selected_recommendations, state='disabled')
+        self.run_selected_btn.pack(side=tk.LEFT, padx=10)
         
         # Results area with success styling and scrollbars
         self.results_frame = ttk.LabelFrame(main_frame, text="🎯 AI Recommendations", padding="15")
@@ -251,56 +272,21 @@ class SimplePLYProcessor:
     def _run_pipeline_thread(self):
         """Run pipeline in separate thread"""
         try:
-            self.log_message("Starting AI Pipeline...")
+            self.log_message("Starting setup (voxelize to discover parts)...")
             
             # Step 1: Copy file to input directory
             self.log_message("Copying PLY file to input directory...")
             if not self.copy_to_input():
                 return
             
-            # Step 2: Voxelization
-            self.log_message("Voxelizing...")
+            # Step 2: Voxelization (fast)
+            self.log_message("Voxelizing (discovering parts)...")
             if not self.run_script("voxelize_local.py"):
                 return
-            
-            # Step 3: Thinning
-            self.log_message("Creating thinned version...")
-            if not self.run_script("voxel_thinning_advanced.py"):
-                return
-            
-            # Step 4: FEA Analysis
-            self.log_message("Running FEA analysis...")
-            if not self.run_script("voxel_to_fea_complete.py"):
-                return
-            
-            # Step 5: Combine Results
-            self.log_message("Combining FEA results...")
-            if not self.run_script("combine_results.py"):
-                return
-            
-            # Step 6: Mass/Volume
-            self.log_message("Adding mass/volume calculations...")
-            if not self.run_script("add_mass_volume.py"):
-                return
-            
-            # Step 7: Pairwise Data
-            self.log_message("Building pairwise data...")
-            if not self.run_script("build_pairwise.py"):
-                return
-            
-            # Step 8: Update Original Parts
-            self.log_message("Updating original parts data...")
-            if not self.update_original_parts():
-                return
-            
-            # Step 9: AI Recommendations
-            self.log_message("Running AI predictions...")
-            if not self.run_script("recommend_thinning_final.py"):
-                return
-            
-            # Step 10: Show Results
-            self.log_message("Pipeline completed successfully!")
-            self.show_results()
+
+            # Populate part selector from voxels and stop here for user to choose
+            self.populate_parts_from_voxels()
+            self.log_message("Parts ready: Select and click 'Run AI on Selected Parts' to continue.")
             
         except Exception as e:
             self.log_message(f"Error: {str(e)}")
@@ -309,7 +295,139 @@ class SimplePLYProcessor:
             # Cleanup
             self.progress.stop()
             self.process_btn.config(state="normal")
+
+    def populate_part_selector(self):
+        """(Deprecated) Load parts from original_parts.csv. Kept for compatibility."""
+        try:
+            import pandas as pd
+            if not os.path.exists("original_parts.csv"):
+                self.log_message("original_parts.csv not found; cannot populate parts list")
+                return
+            df = pd.read_csv("original_parts.csv")
+            # Derive model id from selected file name (without extension)
+            model_id = os.path.basename(self.selected_file).replace('.ply', '')
+            # If the CSV has many models, filter; else fallback to all
+            if 'model_id' in df.columns:
+                dff = df[df['model_id'] == model_id]
+                if dff.empty:
+                    dff = df
+            else:
+                dff = df
+            parts = list(dict.fromkeys(dff.get('part_id', [])))
+            self._set_part_checkboxes(parts)
+        except Exception as e:
+            self.log_message(f"Failed to populate parts: {e}")
+
+    def populate_parts_from_voxels(self):
+        """Populate part list from voxel colors (no analysis needed)."""
+        try:
+            import numpy as np
+            model_id = os.path.basename(self.selected_file).replace('.ply', '')
+            npz_path = os.path.join('voxel_out', model_id, 'voxels_filled_indices_colors.npz')
+            if not os.path.exists(npz_path):
+                self.log_message(f"Voxel data not found: {npz_path}")
+                return
+            data = np.load(npz_path)
+            colors = data.get('colors')
+            if colors is None or len(colors) == 0:
+                self.log_message("No colors found in voxel data.")
+                return
+            uniq, inv = np.unique(colors, axis=0, return_inverse=True)
+            parts = []
+            for idx, rgba in enumerate(uniq):
+                pname = f"PART_{idx:03d}_R{int(rgba[0])}G{int(rgba[1])}B{int(rgba[2])}A{int(rgba[3])}"
+                parts.append(pname)
+            self._set_part_checkboxes(parts)
+        except Exception as e:
+            self.log_message(f"Failed to read voxel parts: {e}")
+
+    def _set_part_checkboxes(self, parts):
+        # Clear existing
+        for w in list(self.part_container.winfo_children()):
+            w.destroy()
+        self.part_vars = {}
+        for p in parts:
+            var = tk.BooleanVar(value=False)
+            cb = ttk.Checkbutton(self.part_container, text=p, variable=var, style='Part.TCheckbutton')
+            cb.pack(anchor='w', pady=2)
+            self.part_vars[p] = var
+        self.run_selected_btn.config(state=('normal' if parts else 'disabled'))
+
+    def run_selected_recommendations(self):
+        """Run recommend_thinning_final.py only for selected parts (stylish, safe)."""
+        try:
+            import pandas as pd
+            # Build remaining pipeline before recommendation to ensure data
+            self.progress.start()
+            # Skip thinning for now; run AI on original parts only
+            self.log_message("Skipping thinning (running AI on original parts)…")
+            # FEA
+            self.log_message("Running FEA analysis…")
+            if not self.run_script("voxel_to_fea_complete.py"):
+                self.progress.stop()
+                return
+            # Combine
+            self.log_message("Combining FEA results…")
+            if not self.run_script("combine_results.py"):
+                self.progress.stop()
+                return
+            # Mass/Volume
+            self.log_message("Adding mass/volume…")
+            if not self.run_script("add_mass_volume.py"):
+                self.progress.stop()
+                return
+            # Pairwise
+            self.log_message("Building pairwise…")
+            if not self.run_script("build_pairwise.py"):
+                self.progress.stop()
+                return
+            # Ensure original_parts
+            self.log_message("Updating original parts…")
+            if not self.update_original_parts():
+                self.progress.stop()
+                return
+            
+            if not os.path.exists("original_parts.csv"):
+                messagebox.showerror("Missing data", "original_parts.csv not found; run pipeline first.")
+                self.progress.stop()
+                return
+            selected_parts = [p for p, v in self.part_vars.items() if v.get()]
+            if not selected_parts:
+                messagebox.showinfo("No parts selected", "Select one or more parts to run recommendations.")
+                self.progress.stop()
+                return
+            # Backup and filter
+            df_full = pd.read_csv("original_parts.csv")
+            if 'part_id' not in df_full.columns:
+                messagebox.showerror("Invalid file", "original_parts.csv missing 'part_id' column.")
+                self.progress.stop()
+                return
+            df_sel = df_full[df_full['part_id'].isin(selected_parts)]
+            if df_sel.empty:
+                messagebox.showinfo("No match", "No rows matched the selected parts.")
+                self.progress.stop()
+                return
+            backup_path = "original_parts.backup.csv"
+            df_full.to_csv(backup_path, index=False)
+            df_sel.to_csv("original_parts.csv", index=False)
+
+            # Run recommender
+            self.log_message(f"Running AI predictions for {len(selected_parts)} selected parts…")
+            if not self.run_script("recommend_thinning_final.py"):
+                # Restore and stop
+                shutil.copy2(backup_path, "original_parts.csv")
+                self.progress.stop()
+                return
+            # Restore full file
+            shutil.copy2(backup_path, "original_parts.csv")
+            # Show results
+            self.show_results()
+            self.progress.stop()
+        except Exception as e:
+            self.log_message(f"Failed to run selected recommendations: {e}")
     
+    # Feasibility check removed per request; AI runs on original parts only
+
     def copy_to_input(self):
         """Copy PLY file to input directory"""
         try:
