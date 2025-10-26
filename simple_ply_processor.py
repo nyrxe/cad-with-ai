@@ -121,12 +121,28 @@ class SimplePLYProcessor:
         thinning_frame = ttk.LabelFrame(main_frame, text="🔧 AI Thinning Options", padding="15")
         thinning_frame.pack(fill=tk.X, pady=(0, 20))
         
-        self.apply_thinning_var = tk.BooleanVar(value=True)  # Default ON
+        self.apply_thinning_var = tk.BooleanVar(value=False)  # Default OFF - not needed
         self.apply_thinning_cb = ttk.Checkbutton(thinning_frame, 
                                                text="Apply AI thinning to voxels and export modified geometry",
                                                variable=self.apply_thinning_var, 
                                                style='Part.TCheckbutton')
-        self.apply_thinning_cb.pack(anchor=tk.W, pady=(0, 10))
+        self.apply_thinning_cb.pack(anchor=tk.W, pady=(0, 5))
+        
+        # Surface offset thinning option (COMMENTED OUT - not needed)
+        # self.surface_offset_var = tk.BooleanVar(value=False)  # Default OFF
+        # self.surface_offset_cb = ttk.Checkbutton(thinning_frame, 
+        #                                        text="Slice surface to thin (offset shell) - produces watertight surface",
+        #                                        variable=self.surface_offset_var, 
+        #                                        style='Part.TCheckbutton')
+        # self.surface_offset_cb.pack(anchor=tk.W, pady=(0, 5))
+        
+        # Voxel SDF thinning option
+        self.voxel_thinning_var = tk.BooleanVar(value=True)  # Default ON
+        self.voxel_thinning_cb = ttk.Checkbutton(thinning_frame, 
+                                               text="Apply AI thinning to voxels (SDF offset) - removes voxel layers",
+                                               variable=self.voxel_thinning_var, 
+                                               style='Part.TCheckbutton')
+        self.voxel_thinning_cb.pack(anchor=tk.W, pady=(0, 10))
         
         # Process button with modern styling
         self.process_btn = ttk.Button(main_frame, text="🚀 Run AI Pipeline", 
@@ -430,11 +446,23 @@ class SimplePLYProcessor:
                 self.progress.stop()
                 return
             
-            # Apply AI thinning if enabled
-            if self.apply_thinning_var.get():
-                self.log_message("Applying AI thinning to voxels...")
-                if not self.run_script("apply_ai_thinning.py"):
-                    self.log_message("Warning: AI thinning application failed, but continuing with results...")
+            # Apply AI thinning if enabled (COMMENTED OUT - using voxel thinning instead)
+            # if self.apply_thinning_var.get():
+            #     self.log_message("Applying AI thinning to voxels...")
+            #     if not self.run_script("apply_ai_thinning.py"):
+            #         self.log_message("Warning: AI thinning application failed, but continuing with results...")
+            
+            # Apply voxel SDF thinning if enabled
+            if self.voxel_thinning_var.get():
+                self.log_message("Applying voxel SDF thinning...")
+                if not self.run_script("voxel_sdf_thinning.py"):
+                    self.log_message("Warning: Voxel SDF thinning failed, but continuing with results...")
+            
+            # Apply surface offset thinning if enabled (COMMENTED OUT - not needed)
+            # if self.surface_offset_var.get():
+            #     self.log_message("Applying surface offset thinning...")
+            #     if not self.run_script("surface_offset_thinning.py"):
+            #         self.log_message("Warning: Surface offset thinning failed, but continuing with results...")
             
             # Restore full file
             shutil.copy2(backup_path, "original_parts.csv")
@@ -640,8 +668,14 @@ except Exception as e:
             
             self.results_text.insert(tk.END, f"🎉 AI Analysis Complete! Found {len(results)} parts:\n\n")
             
-            # Load thinning application report if available
-            thinning_report = self.load_thinning_report()
+            # Load thinning application report if available (COMMENTED OUT - using voxel thinning instead)
+            # thinning_report = self.load_thinning_report()
+            
+            # Load surface offset thinning report if available (COMMENTED OUT - not needed)
+            # surface_offset_report = self.load_surface_offset_report()
+            
+            # Load voxel thinning report if available
+            voxel_thinning_report = self.load_voxel_thinning_report()
             
             for i, result in enumerate(results, 1):
                 part_id = result['part_id']
@@ -655,18 +689,49 @@ except Exception as e:
                     self.results_text.insert(tk.END, f"📋 Part {i}: {part_id}\n")
                     self.results_text.insert(tk.END, f"   ✅ Target reduction: {reduction:.1f}%\n")
                     
-                    # Show achieved reduction if thinning was applied
-                    if thinning_report and part_id in thinning_report:
-                        achieved = thinning_report[part_id]['achieved_pct']
-                        stop_reason = thinning_report[part_id]['stop_reason']
-                        if achieved > 0:
-                            self.results_text.insert(tk.END, f"   🎯 Achieved reduction: {achieved:.1f}%")
-                            if stop_reason != "target_met":
-                                self.results_text.insert(tk.END, f" (bound: {stop_reason})")
+                    # Show achieved reduction if thinning was applied (COMMENTED OUT - using voxel thinning instead)
+                    # if thinning_report and part_id in thinning_report:
+                    #     achieved = thinning_report[part_id]['achieved_pct']
+                    #     stop_reason = thinning_report[part_id]['stop_reason']
+                    #     if achieved > 0:
+                    #         self.results_text.insert(tk.END, f"   🎯 Achieved reduction: {achieved:.1f}%")
+                    #         if stop_reason != "target_met":
+                    #             self.results_text.insert(tk.END, f" (bound: {stop_reason})")
+                    #         self.results_text.insert(tk.END, "\n")
+                    #     else:
+                    #         self.results_text.insert(tk.END, f"   ⚠️ No thinning applied ({stop_reason})\n")
+                    
+                    # Show voxel thinning results
+                    if voxel_thinning_report and part_id in voxel_thinning_report:
+                        voxel_data = voxel_thinning_report[part_id]
+                        voxel_achieved = voxel_data['achieved_pct']
+                        voxel_delta = voxel_data['delta_mm_used']
+                        voxel_removed = voxel_data['removed_voxels']
+                        voxel_reason = voxel_data['stop_reason']
+                        if voxel_achieved > 0:
+                            self.results_text.insert(tk.END, f"   📦 Voxel thinning: {voxel_achieved:.1f}% (Δ={voxel_delta:.3f}mm, removed={voxel_removed})")
+                            if voxel_reason != "target_met":
+                                self.results_text.insert(tk.END, f" (bound: {voxel_reason})")
                             self.results_text.insert(tk.END, "\n")
                         else:
-                            self.results_text.insert(tk.END, f"   ⚠️ No thinning applied ({stop_reason})\n")
-                    else:
+                            self.results_text.insert(tk.END, f"   ⚠️ No voxel thinning applied ({voxel_reason})\n")
+                    
+                    # Show surface offset thinning results (COMMENTED OUT - not needed)
+                    # if surface_offset_report and part_id in surface_offset_report:
+                    #     surface_data = surface_offset_report[part_id]
+                    #     surface_achieved = surface_data['achieved_pct']
+                    #     surface_offset = surface_data['offset_mm']
+                    #     surface_reason = surface_data['stop_reason']
+                    #     if surface_achieved > 0:
+                    #         self.results_text.insert(tk.END, f"   🔪 Surface offset: {surface_achieved:.1f}% (Δ={surface_offset:.3f}mm)")
+                    #         if surface_reason != "target_met":
+                    #             self.results_text.insert(tk.END, f" (bound: {surface_reason})")
+                    #         self.results_text.insert(tk.END, "\n")
+                    #     else:
+                    #         self.results_text.insert(tk.END, f"   ⚠️ No surface offset applied ({surface_reason})\n")
+                    
+                    # Show prediction data if no thinning was applied
+                    if not voxel_thinning_report or part_id not in voxel_thinning_report:
                         self.results_text.insert(tk.END, f"   📊 Predicted stress change: {stress_change:.1f}%\n")
                         self.results_text.insert(tk.END, f"   💰 Expected mass saving: {mass_saving:.3f} kg\n")
                 else:
@@ -682,13 +747,32 @@ except Exception as e:
                 avg_reduction = sum(r['reduction'] for r in results if r['reduction'] > 0) / optimized_parts
                 self.results_text.insert(tk.END, f"   Average reduction: {avg_reduction:.1f}%\n")
             
-            # Show thinning application status
-            if self.apply_thinning_var.get():
-                if thinning_report:
-                    applied_parts = len([r for r in thinning_report.values() if r['achieved_pct'] > 0])
-                    self.results_text.insert(tk.END, f"   🔧 Thinning applied: {applied_parts} parts\n")
+            # Show thinning application status (COMMENTED OUT - using voxel thinning instead)
+            # if self.apply_thinning_var.get():
+            #     if thinning_report:
+            #         applied_parts = len([r for r in thinning_report.values() if r['achieved_pct'] > 0])
+            #         self.results_text.insert(tk.END, f"   🔧 Thinning applied: {applied_parts} parts\n")
+            #     else:
+            #         self.results_text.insert(tk.END, f"   🔧 Thinning: Not applied (no report found)\n")
+            
+            # Show voxel thinning status
+            if self.voxel_thinning_var.get():
+                if voxel_thinning_report:
+                    voxel_applied_parts = len([r for r in voxel_thinning_report.values() if r['achieved_pct'] > 0])
+                    avg_delta = sum(r['delta_mm_used'] for r in voxel_thinning_report.values() if r['achieved_pct'] > 0) / max(voxel_applied_parts, 1)
+                    total_removed = sum(r['removed_voxels'] for r in voxel_thinning_report.values())
+                    self.results_text.insert(tk.END, f"   📦 Voxel thinning applied: {voxel_applied_parts} parts (avg Δ={avg_delta:.3f}mm, removed {total_removed} voxels)\n")
                 else:
-                    self.results_text.insert(tk.END, f"   🔧 Thinning: Not applied (no report found)\n")
+                    self.results_text.insert(tk.END, f"   📦 Voxel thinning: Not applied (no report found)\n")
+            
+            # Show surface offset thinning status (COMMENTED OUT - not needed)
+            # if self.surface_offset_var.get():
+            #     if surface_offset_report:
+            #         surface_applied_parts = len([r for r in surface_offset_report.values() if r['achieved_pct'] > 0])
+            #         avg_offset = sum(r['offset_mm'] for r in surface_offset_report.values() if r['achieved_pct'] > 0) / max(surface_applied_parts, 1)
+            #         self.results_text.insert(tk.END, f"   🔪 Surface offset applied: {surface_applied_parts} parts (avg Δ={avg_offset:.3f}mm)\n")
+            #     else:
+            #         self.results_text.insert(tk.END, f"   🔪 Surface offset: Not applied (no report found)\n")
             
             self.log_message(f"AI Recommendations: {len(results)} parts analyzed, {optimized_parts} optimized, {total_mass_saving:.3f} kg total savings")
         else:
@@ -720,6 +804,28 @@ except Exception as e:
                 return {row['part_id']: row.to_dict() for _, row in df.iterrows()}
         except Exception as e:
             self.log_message(f"Could not load thinning report: {e}")
+        return None
+    
+    def load_surface_offset_report(self):
+        """Load surface offset thinning report if available"""
+        try:
+            if os.path.exists("surface_offset_thinning_report.csv"):
+                import pandas as pd
+                df = pd.read_csv("surface_offset_thinning_report.csv")
+                return {row['part_id']: row.to_dict() for _, row in df.iterrows()}
+        except Exception as e:
+            self.log_message(f"Could not load surface offset report: {e}")
+        return None
+    
+    def load_voxel_thinning_report(self):
+        """Load voxel thinning report if available"""
+        try:
+            if os.path.exists("voxel_thinning_apply_report.csv"):
+                import pandas as pd
+                df = pd.read_csv("voxel_thinning_apply_report.csv")
+                return {row['part_id']: row.to_dict() for _, row in df.iterrows()}
+        except Exception as e:
+            self.log_message(f"Could not load voxel thinning report: {e}")
         return None
 
     def show_example_results(self):
