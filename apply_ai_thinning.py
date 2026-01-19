@@ -568,7 +568,7 @@ class AIThinningApplier:
             
             # Export voxel boxes
             boxes_ply = os.path.join(voxel_out_dir, model_id, "voxels_thinned_boxes.ply")
-            box_size = pitch * 0.9  # Slightly smaller than pitch for gaps
+            box_size = pitch  # Full pitch size - boxes touch each other (no gaps)
             box_vertices = []
             box_faces = []
             face_offset = 0

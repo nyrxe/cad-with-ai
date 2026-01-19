@@ -184,66 +184,134 @@ def write_calculix_input(node_coords, elements, elsets, uniq_colors, output_dir)
     return inp_path
 
 def run_calculix(input_path, output_dir, num_nodes=None, num_elements=None):
-    """Run CalculiX analysis"""
+    """Run CalculiX analysis with improved error handling"""
     print("\n=== RUNNING CALCULIX ===")
     
     # Check if CalculiX is available
     try:
-        result = subprocess.run(['ccx', '--version'], capture_output=True, text=True)
-        print("CalculiX found:", result.stdout.strip())
-    except FileNotFoundError:
-        print("CalculiX not found. Please install CalculiX:")
-        print("  Windows: Download from https://www.calculix.de/")
-        print("  Linux: sudo apt-get install calculix-ccx")
-        print("  macOS: brew install calculix")
+        # Try multiple possible CalculiX command names
+        calculix_cmd = None
+        for cmd in ['ccx', 'calculix', 'ccx.exe']:
+            try:
+                result = subprocess.run([cmd, '--version'], 
+                                      capture_output=True, 
+                                      text=True, 
+                                      timeout=5)
+                if result.returncode == 0 or 'CalculiX' in result.stdout or 'CalculiX' in result.stderr:
+                    calculix_cmd = cmd
+                    print(f"CalculiX found: {cmd}")
+                    print(f"Version info: {result.stdout.strip() or result.stderr.strip()}")
+                    break
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                continue
+        
+        if calculix_cmd is None:
+            print("ERROR: CalculiX not found. Please install CalculiX:")
+            print("  Windows: Download from https://www.calculix.de/")
+            print("  Linux: sudo apt-get install calculix-ccx")
+            print("  macOS: brew install calculix")
+            print("  Or place ccx.exe in your project directory")
+            return False
+            
+    except Exception as e:
+        print(f"ERROR: Failed to check CalculiX installation: {e}")
         return False
     
-    # Check model size and warn if large
+    # Check model size and calculate appropriate timeout
+    timeout_seconds = 300  # Default 5 minutes
     if num_nodes and num_elements:
         print(f"Model size: {num_nodes} nodes, {num_elements} elements")
         
-        if num_nodes > 10000 or num_elements > 10000:
-            print(f"WARNING: Large model detected: {num_nodes} nodes, {num_elements} elements")
-            print("   This may take 10-30 minutes to solve...")
-            
-            # Ask user if they want to continue (COMMENTED OUT FOR AI)
-            # while True:
-            #     response = input("   Continue with analysis? (y/n/skip): ").lower().strip()
-            #     if response in ['y', 'yes']:
-            #         print("   Proceeding with analysis...")
-            #         break
-            #     elif response in ['n', 'no', 'skip']:
-            #         print("   Skipping this model...")
-            #         return False
-            #     else:
-            #         print("   Please enter 'y' for yes, 'n' for no, or 'skip'")
-            print("   Proceeding with analysis automatically...")
+        # Estimate timeout based on model size
+        if num_nodes > 50000 or num_elements > 50000:
+            timeout_seconds = 1800  # 30 minutes for very large models
+            print(f"WARNING: Very large model detected")
+            print(f"   Estimated solve time: 20-30 minutes")
+        elif num_nodes > 20000 or num_elements > 20000:
+            timeout_seconds = 900  # 15 minutes for large models
+            print(f"WARNING: Large model detected")
+            print(f"   Estimated solve time: 10-15 minutes")
+        elif num_nodes > 10000 or num_elements > 10000:
+            timeout_seconds = 600  # 10 minutes for medium-large models
+            print(f"WARNING: Medium-large model detected")
+            print(f"   Estimated solve time: 5-10 minutes")
+        
+        # Check memory requirements (rough estimate)
+        estimated_memory_mb = (num_nodes * 8 * 3 + num_elements * 8 * 8) / (1024 * 1024)
+        if estimated_memory_mb > 2000:
+            print(f"WARNING: Model may require {estimated_memory_mb:.0f} MB RAM")
+            print(f"   Ensure sufficient memory is available")
     
     # Run CalculiX
     base_name = os.path.splitext(os.path.basename(input_path))[0]
     input_dir = os.path.dirname(input_path)
     
     try:
-        result = subprocess.run(['ccx', base_name], 
+        print(f"Starting CalculiX analysis (timeout: {timeout_seconds//60} minutes)...")
+        print(f"Working directory: {input_dir}")
+        print(f"Input file: {base_name}.inp")
+        
+        # Run CalculiX with improved error handling
+        result = subprocess.run([calculix_cmd, base_name], 
                               cwd=input_dir, 
                               capture_output=True, 
                               text=True, 
-                              timeout=300)  # 5 minute timeout
+                              timeout=timeout_seconds,
+                              errors='replace')  # Handle encoding errors gracefully
         
         if result.returncode == 0:
             print("CalculiX analysis completed successfully")
             return True
         else:
-            print(f"CalculiX failed with return code {result.returncode}")
-            print("STDOUT:", result.stdout)
-            print("STDERR:", result.stderr)
+            print(f"ERROR: CalculiX failed with return code {result.returncode}")
+            
+            # Show last few lines of output for debugging
+            stdout_lines = result.stdout.split('\n')[-20:] if result.stdout else []
+            stderr_lines = result.stderr.split('\n')[-20:] if result.stderr else []
+            
+            if stderr_lines:
+                print("Last error messages:")
+                for line in stderr_lines:
+                    if line.strip():
+                        print(f"  {line}")
+            
+            if stdout_lines:
+                print("Last output messages:")
+                for line in stdout_lines[-10:]:
+                    if line.strip():
+                        print(f"  {line}")
+            
+            # Check for common error patterns
+            error_text = (result.stdout + result.stderr).lower()
+            if 'memory' in error_text or 'out of memory' in error_text:
+                print("ERROR: Out of memory - model is too large")
+                print("   Try reducing voxel resolution or processing smaller models")
+            elif 'singular' in error_text or 'matrix' in error_text:
+                print("ERROR: Numerical instability detected")
+                print("   Model may have geometry issues")
+            elif 'not found' in error_text or 'cannot open' in error_text:
+                print("ERROR: File access issue")
+                print("   Check file permissions and paths")
+            
             return False
             
     except subprocess.TimeoutExpired:
-        print("CalculiX analysis timed out")
+        print(f"ERROR: CalculiX analysis timed out after {timeout_seconds//60} minutes")
+        print("   Model is too large or complex for current timeout")
+        print("   Consider reducing voxel resolution or increasing timeout")
+        return False
+    except MemoryError:
+        print("ERROR: Out of memory during CalculiX execution")
+        print("   Model requires too much RAM")
+        print("   Try reducing voxel resolution")
         return False
     except Exception as e:
-        print(f"Error running CalculiX: {e}")
+        print(f"ERROR: Exception running CalculiX: {type(e).__name__}: {e}")
+        import traceback
+        print("Traceback:")
+        for line in traceback.format_exc().split('\n')[-10:]:
+            if line.strip():
+                print(f"  {line}")
         return False
 
 def extract_stress_data(dat_path, frd_path=None):

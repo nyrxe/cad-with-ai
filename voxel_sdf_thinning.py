@@ -438,8 +438,9 @@ class VoxelSDFThinner:
         logger.info(f"Saved thinned voxel data: {output_npz}")
         logger.info(f"Original: {len(indices)} voxels → Thinned: {len(thinned_indices)} voxels")
         
-        # Export only essential PLY files
+        # Export PLY files (both with gaps for visualization and solid for actual use)
         self.export_essential_ply(model_id, voxel_out_dir, thinned_indices, colors, pitch, transform)
+        self.export_solid_voxels(model_id, voxel_out_dir, thinned_indices, colors, pitch, transform)
         
         return report_data
     
@@ -458,7 +459,7 @@ class VoxelSDFThinner:
             
             # Export only thinned colored voxel boxes
             boxes_ply = os.path.join(voxel_out_dir, model_id, "voxels_thinned_colored_boxes.ply")
-            box_size = pitch * 0.9  # Slightly smaller than pitch for gaps
+            box_size = pitch  # Full pitch size - boxes touch each other (no gaps)
             box_vertices = []
             box_faces = []
             face_offset = 0
@@ -516,6 +517,122 @@ class VoxelSDFThinner:
             
         except Exception as e:
             logger.warning(f"Failed to export PLY: {e}")
+    
+    def export_solid_voxels(self, model_id, voxel_out_dir, indices, colors, pitch, transform):
+        """Export solid voxel mesh with no gaps (boxes touch each other, internal faces culled)"""
+        try:
+            import trimesh
+            
+            if len(indices) == 0:
+                return
+            
+            # Convert indices to world coordinates
+            homo_coords = np.hstack([indices, np.ones((len(indices), 1))])
+            world_coords = (transform @ homo_coords.T).T[:, :3]
+            
+            # Build voxel set for neighbor checking (use rounded coordinates)
+            voxel_set = set()
+            for coord in world_coords:
+                # Round to voxel centers for neighbor checking
+                rounded_coord = tuple(np.round(coord / pitch) * pitch)
+                voxel_set.add(rounded_coord)
+            
+            # Export solid voxel boxes (exact pitch, no gaps)
+            solid_ply = os.path.join(voxel_out_dir, model_id, "voxels_thinned_solid.ply")
+            box_vertices = []
+            box_faces = []
+            face_offset = 0
+            
+            for i, (x, y, z) in enumerate(world_coords):
+                # Create box vertices - exact pitch size (boxes touch)
+                half_size = pitch / 2
+                box_verts = np.array([
+                    [x - half_size, y - half_size, z - half_size],
+                    [x + half_size, y - half_size, z - half_size],
+                    [x + half_size, y + half_size, z - half_size],
+                    [x - half_size, y + half_size, z - half_size],
+                    [x - half_size, y - half_size, z + half_size],
+                    [x + half_size, y - half_size, z + half_size],
+                    [x + half_size, y + half_size, z + half_size],
+                    [x - half_size, y + half_size, z + half_size]
+                ])
+                
+                # Box faces (12 triangles for 6 faces)
+                box_faces_this = np.array([
+                    [0, 1, 2], [0, 2, 3],  # bottom
+                    [4, 7, 6], [4, 6, 5],  # top
+                    [0, 4, 5], [0, 5, 1],  # front
+                    [2, 6, 7], [2, 7, 3],  # back
+                    [0, 3, 7], [0, 7, 4],  # left
+                    [1, 5, 6], [1, 6, 2]   # right
+                ]) + face_offset
+                
+                # Face centers and normals for culling
+                face_info = [
+                    (np.mean(box_verts[[0,1,2,3]], axis=0), np.array([0, 0, -1])),  # bottom
+                    (np.mean(box_verts[[4,5,6,7]], axis=0), np.array([0, 0, 1])),   # top
+                    (np.mean(box_verts[[0,1,5,4]], axis=0), np.array([0, -1, 0])),  # front
+                    (np.mean(box_verts[[2,3,7,6]], axis=0), np.array([0, 1, 0])),  # back
+                    (np.mean(box_verts[[0,3,7,4]], axis=0), np.array([-1, 0, 0])),  # left
+                    (np.mean(box_verts[[1,2,6,5]], axis=0), np.array([1, 0, 0]))   # right
+                ]
+                
+                # Cull internal faces (where neighbor exists)
+                faces_to_keep = []
+                for face_idx, (face_center, normal) in enumerate(face_info):
+                    # Check neighbor in normal direction
+                    neighbor_pos = face_center + normal * pitch * 0.1
+                    neighbor_voxel = tuple(np.round(neighbor_pos / pitch) * pitch)
+                    
+                    if neighbor_voxel not in voxel_set:
+                        # No neighbor - keep this face
+                        if face_idx == 0:
+                            faces_to_keep.extend([box_faces_this[0], box_faces_this[1]])  # bottom
+                        elif face_idx == 1:
+                            faces_to_keep.extend([box_faces_this[2], box_faces_this[3]])  # top
+                        elif face_idx == 2:
+                            faces_to_keep.extend([box_faces_this[4], box_faces_this[5]])  # front
+                        elif face_idx == 3:
+                            faces_to_keep.extend([box_faces_this[6], box_faces_this[7]])  # back
+                        elif face_idx == 4:
+                            faces_to_keep.extend([box_faces_this[8], box_faces_this[9]])  # left
+                        elif face_idx == 5:
+                            faces_to_keep.extend([box_faces_this[10], box_faces_this[11]])  # right
+                
+                if faces_to_keep:
+                    box_vertices.append(box_verts)
+                    box_faces.append(np.array(faces_to_keep))
+                    face_offset += 8
+            
+            if box_vertices:
+                all_vertices = np.vstack(box_vertices)
+                all_faces = np.vstack(box_faces)
+                
+                # Create mesh
+                mesh = trimesh.Trimesh(vertices=all_vertices, faces=all_faces)
+                
+                # Apply colors
+                if colors is not None and len(colors) > 0 and len(colors) == len(indices):
+                    try:
+                        # Assign colors to faces (simplified - one color per box)
+                        face_colors = []
+                        box_idx = 0
+                        for box_faces_group in box_faces:
+                            num_faces = len(box_faces_group)
+                            if box_idx < len(colors):
+                                face_colors.extend([colors[box_idx]] * num_faces)
+                            box_idx += 1
+                        
+                        if len(face_colors) == len(all_faces):
+                            mesh.visual.face_colors = np.array(face_colors)
+                    except Exception as e:
+                        logger.warning(f"Color assignment failed: {e}")
+                
+                mesh.export(solid_ply)
+                logger.info(f"Exported solid voxel mesh (no gaps, internal faces culled): {solid_ply}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to export solid voxels: {e}")
 
 def main():
     """Main function to apply voxel SDF thinning to all models"""

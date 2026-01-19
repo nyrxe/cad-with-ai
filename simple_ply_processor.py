@@ -348,25 +348,87 @@ class SimplePLYProcessor:
     def populate_parts_from_voxels(self):
         """Populate part list from voxel colors (no analysis needed)."""
         try:
-            import numpy as np
             model_id = os.path.basename(self.selected_file).replace('.ply', '')
             npz_path = os.path.join('voxel_out', model_id, 'voxels_filled_indices_colors.npz')
             if not os.path.exists(npz_path):
                 self.log_message(f"Voxel data not found: {npz_path}")
                 return
-            data = np.load(npz_path)
-            colors = data.get('colors')
-            if colors is None or len(colors) == 0:
-                self.log_message("No colors found in voxel data.")
-                return
-            uniq, inv = np.unique(colors, axis=0, return_inverse=True)
-            parts = []
-            for idx, rgba in enumerate(uniq):
-                pname = f"PART_{idx:03d}_R{int(rgba[0])}G{int(rgba[1])}B{int(rgba[2])}A{int(rgba[3])}"
-                parts.append(pname)
-            self._set_part_checkboxes(parts)
+            
+            # Use subprocess to load voxel data (avoids numpy import issues in GUI thread)
+            parts = self.load_voxel_parts_with_subprocess(npz_path)
+            if parts:
+                self._set_part_checkboxes(parts)
+            else:
+                self.log_message("No parts found in voxel data.")
         except Exception as e:
             self.log_message(f"Failed to read voxel parts: {e}")
+    
+    def load_voxel_parts_with_subprocess(self, npz_path):
+        """Load voxel parts using subprocess to avoid numpy import issues"""
+        try:
+            # Create a simple Python script to extract parts
+            script_path = "temp_voxel_parts_loader.py"
+            with open(script_path, 'w', encoding='utf-8') as f:
+                script_content = f'''import numpy as np
+import sys
+import os
+
+try:
+    data = np.load(r"{npz_path}")
+    colors = data.get('colors')
+    if colors is None or len(colors) == 0:
+        print("NO_COLORS")
+        sys.exit(0)
+    
+    uniq, inv = np.unique(colors, axis=0, return_inverse=True)
+    parts = []
+    for idx, rgba in enumerate(uniq):
+        pname = "PART_{{:03d}}_R{{}}G{{}}B{{}}A{{}}".format(idx, int(rgba[0]), int(rgba[1]), int(rgba[2]), int(rgba[3]))
+        print("PART|" + pname)
+    print("END")
+except Exception as e:
+    print("ERROR|" + str(e))
+    sys.exit(1)
+'''
+                f.write(script_content)
+            
+            # Run with virtual environment
+            env = os.environ.copy()
+            env['PYTHONNOUSERSITE'] = '1'
+            env['PYTHONIOENCODING'] = 'UTF-8'
+            env['PYTHONUTF8'] = '1'
+            
+            result = subprocess.run([
+                self.python_exe, script_path
+            ], capture_output=True, text=True, cwd=os.getcwd(), env=env)
+            
+            # Clean up temp file
+            if os.path.exists(script_path):
+                os.remove(script_path)
+            
+            if result.returncode == 0 and result.stdout.strip():
+                output_lines = result.stdout.strip().split('\n')
+                if output_lines[0] == "NO_COLORS":
+                    self.log_message("No colors found in voxel data.")
+                    return None
+                elif output_lines[0].startswith("ERROR|"):
+                    self.log_message(f"Voxel parts loading failed: {output_lines[0]}")
+                    return None
+                else:
+                    # Parse parts
+                    parts = []
+                    for line in output_lines:
+                        if line.startswith("PART|"):
+                            part_name = line.split("|")[1]
+                            parts.append(part_name)
+                    return parts if parts else None
+            else:
+                self.log_message(f"Voxel parts loading failed: {result.stderr}")
+                return None
+                
+        except Exception as e:
+            self.log_message(f"Error loading voxel parts: {str(e)}")
+            return None
 
     def _set_part_checkboxes(self, parts):
         # Clear existing
@@ -388,16 +450,50 @@ class SimplePLYProcessor:
             self.progress.start()
             # Skip thinning for now; run AI on original parts only
             self.log_message("Skipping thinning (running AI on original parts)…")
-            # FEA
+            
+            # FEA (with comprehensive error recovery)
             self.log_message("Running FEA analysis…")
-            if not self.run_script("voxel_to_fea_complete.py"):
+            self.log_message("NOTE: FEA analysis can take 10-30 minutes for large models")
+            self.log_message("NOTE: If this crashes, check CalculiX installation and model size")
+            
+            try:
+                fea_success = self.run_script("voxel_to_fea_complete.py")
+                if not fea_success:
+                    self.log_message("WARNING: FEA analysis failed")
+                    self.log_message("  This may be due to:")
+                    self.log_message("  - CalculiX not installed")
+                    self.log_message("  - Model too large (memory/timeout)")
+                    self.log_message("  - Insufficient system resources")
+                    self.log_message("  Continuing with remaining pipeline...")
+            except KeyboardInterrupt:
+                self.log_message("ERROR: FEA analysis interrupted by user")
                 self.progress.stop()
                 return
-            # Combine
+            except MemoryError as e:
+                self.log_message(f"ERROR: Out of memory during FEA: {e}")
+                self.log_message("  Try reducing voxel resolution (e.g., python voxelize_local.py 16)")
+                self.log_message("  Continuing without FEA results...")
+            except SystemExit:
+                self.log_message("ERROR: FEA script exited unexpectedly")
+                self.log_message("  Continuing without FEA results...")
+            except Exception as e:
+                self.log_message(f"ERROR: Unexpected error during FEA: {type(e).__name__}: {e}")
+                import traceback
+                self.log_message("  Error details (last 3 lines):")
+                for line in traceback.format_exc().split('\n')[-4:-1]:
+                    if line.strip():
+                        self.log_message(f"    {line}")
+                self.log_message("  Continuing without FEA results...")
+            
+            # Combine (skip if FEA failed)
             self.log_message("Combining FEA results…")
-            if not self.run_script("combine_results.py"):
-                self.progress.stop()
-                return
+            try:
+                if not self.run_script("combine_results.py"):
+                    self.log_message("WARNING: Failed to combine results (FEA may have failed)")
+                    # Continue anyway - other steps might still work
+            except Exception as e:
+                self.log_message(f"ERROR: Exception in combine_results: {e}")
+                self.log_message("  Continuing with remaining pipeline...")
             # Mass/Volume
             self.log_message("Adding mass/volume…")
             if not self.run_script("add_mass_volume.py"):
@@ -469,8 +565,31 @@ class SimplePLYProcessor:
             # Show results
             self.show_results()
             self.progress.stop()
+        except KeyboardInterrupt:
+            self.log_message("ERROR: Process interrupted by user")
+            self.progress.stop()
+            self.process_btn.config(state="normal")
+        except MemoryError as e:
+            self.log_message(f"ERROR: Out of memory: {e}")
+            self.log_message("  Try reducing voxel resolution or processing smaller models")
+            self.progress.stop()
+            self.process_btn.config(state="normal")
+            self.show_error_results()
+        except SystemExit:
+            self.log_message("ERROR: Script exited unexpectedly")
+            self.progress.stop()
+            self.process_btn.config(state="normal")
         except Exception as e:
-            self.log_message(f"Failed to run selected recommendations: {e}")
+            self.log_message(f"ERROR: Unexpected error in pipeline: {type(e).__name__}: {e}")
+            import traceback
+            self.log_message("  Full error traceback:")
+            for line in traceback.format_exc().split('\n')[-15:]:
+                if line.strip():
+                    self.log_message(f"    {line}")
+            self.progress.stop()
+            self.process_btn.config(state="normal")
+            # Show error in results area
+            self.show_error_results_with_details(str(e))
     
     # Feasibility check removed per request; AI runs on original parts only
 
@@ -493,7 +612,7 @@ class SimplePLYProcessor:
             return False
     
     def run_script(self, script_name):
-        """Run a Python script using virtual environment"""
+        """Run a Python script using virtual environment with improved error handling"""
         try:
             # Set environment variables for Unicode support
             env = os.environ.copy()
@@ -501,24 +620,91 @@ class SimplePLYProcessor:
             env["PYTHONIOENCODING"] = "UTF-8"
             env["PYTHONUTF8"] = "1"
             
-            # Use virtual environment Python
-            result = subprocess.run([
-                self.python_exe, script_name
-            ], capture_output=True, text=True, cwd=os.getcwd(), env=env, encoding='utf-8', errors='replace')
+            # Special handling for FEA analysis (longer timeout, better error handling)
+            timeout = None
+            if "fea" in script_name.lower() or "calculix" in script_name.lower():
+                timeout = 3600  # 1 hour timeout for FEA
+                self.log_message(f"Running {script_name} (FEA analysis - may take 10-30 minutes for large models)...")
+            
+            # Use virtual environment Python with crash protection
+            try:
+                # On Windows, prevent console window from appearing (reduces crash risk)
+                creation_flags = 0
+                if sys.platform == 'win32':
+                    creation_flags = subprocess.CREATE_NO_WINDOW
+                
+                result = subprocess.run([
+                    self.python_exe, script_name
+                ], capture_output=True, text=True, cwd=os.getcwd(), env=env, 
+                   encoding='utf-8', errors='replace', timeout=timeout,
+                   creationflags=creation_flags)
+            except subprocess.TimeoutExpired:
+                # Re-raise timeout to be handled below
+                raise
+            except OSError as e:
+                # Handle OS-level errors (file not found, permission denied, etc.)
+                self.log_message(f"ERROR: Failed to execute {script_name}: {e}")
+                if hasattr(e, 'errno') and e.errno == 2:  # File not found
+                    self.log_message(f"  Python executable not found: {self.python_exe}")
+                    self.log_message("  Check virtual environment setup")
+                return False
+            except Exception as e:
+                # Catch any other subprocess errors before they crash the app
+                self.log_message(f"ERROR: Subprocess error for {script_name}: {type(e).__name__}: {e}")
+                import traceback
+                self.log_message("  Error details:")
+                for line in traceback.format_exc().split('\n')[-5:]:
+                    if line.strip():
+                        self.log_message(f"    {line}")
+                return False
             
             if result.returncode == 0:
-                self.log_message(f"{script_name} completed")
+                self.log_message(f"{script_name} completed successfully")
                 return True
             else:
-                # Check if error is due to Unicode encoding
-                if "UnicodeEncodeError" in result.stderr or "charmap" in result.stderr:
-                    self.log_message(f"{script_name} failed: Output contained characters not supported by the active code page; replaced with ASCII.")
+                # Extract meaningful error messages
+                error_output = result.stderr if result.stderr else result.stdout
+                
+                # Check for common error patterns
+                if "CalculiX not found" in error_output or "ccx" in error_output.lower():
+                    self.log_message(f"ERROR: {script_name} failed - CalculiX not installed")
+                    self.log_message("  Please install CalculiX:")
+                    self.log_message("  Windows: Download from https://www.calculix.de/")
+                    self.log_message("  Or place ccx.exe in project directory")
+                elif "timeout" in error_output.lower() or "timed out" in error_output.lower():
+                    self.log_message(f"ERROR: {script_name} timed out")
+                    self.log_message("  Model may be too large - try reducing voxel resolution")
+                elif "memory" in error_output.lower() or "out of memory" in error_output.lower():
+                    self.log_message(f"ERROR: {script_name} ran out of memory")
+                    self.log_message("  Model is too large - reduce voxel resolution")
+                elif "UnicodeEncodeError" in error_output or "charmap" in error_output:
+                    self.log_message(f"{script_name} failed: Output encoding issue (non-critical)")
                 else:
-                    self.log_message(f"{script_name} failed: {result.stderr}")
+                    # Show last few lines of error
+                    error_lines = error_output.split('\n')
+                    self.log_message(f"ERROR: {script_name} failed")
+                    for line in error_lines[-5:]:
+                        if line.strip():
+                            self.log_message(f"  {line}")
+                
                 return False
                 
+        except subprocess.TimeoutExpired:
+            self.log_message(f"ERROR: {script_name} timed out after {timeout//60 if timeout else 'default'} minutes")
+            self.log_message("  This may indicate the model is too large or CalculiX is stuck")
+            return False
+        except MemoryError:
+            self.log_message(f"ERROR: {script_name} ran out of memory")
+            self.log_message("  Try reducing voxel resolution or processing smaller models")
+            return False
         except Exception as e:
-            self.log_message(f"Error running {script_name}: {str(e)}")
+            self.log_message(f"ERROR: Exception running {script_name}: {type(e).__name__}: {str(e)}")
+            import traceback
+            # Only show last few lines of traceback to avoid overwhelming the log
+            tb_lines = traceback.format_exc().split('\n')
+            for line in tb_lines[-5:]:
+                if line.strip():
+                    self.log_message(f"  {line}")
             return False
     
     def update_original_parts(self):
