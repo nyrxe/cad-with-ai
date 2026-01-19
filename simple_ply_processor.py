@@ -184,8 +184,16 @@ class SimplePLYProcessor:
         self.part_container.bind('<Configure>', _pcfg)
         part_canvas.pack(side=tk.LEFT, fill=tk.X, expand=True)
         part_scroll.pack(side=tk.LEFT, fill=tk.Y, padx=(6,0))
-        self.run_selected_btn = ttk.Button(select_frame, text="Run AI on Selected Parts", style='Accent.TButton', command=self.run_selected_recommendations, state='disabled')
-        self.run_selected_btn.pack(side=tk.LEFT, padx=10)
+        
+        # Button frame for actions
+        button_frame = ttk.Frame(select_frame)
+        button_frame.pack(side=tk.LEFT, padx=10)
+        
+        self.run_selected_btn = ttk.Button(button_frame, text="Run AI on Selected Parts", style='Accent.TButton', command=self.run_selected_recommendations, state='disabled')
+        self.run_selected_btn.pack(pady=(0, 5))
+        
+        self.open_voxel_folder_btn = ttk.Button(button_frame, text="📁 Open Voxel Output Folder", command=self.open_voxel_output_folder, state='disabled')
+        self.open_voxel_folder_btn.pack()
         
         # Results area with success styling and scrollbars
         self.results_frame = ttk.LabelFrame(main_frame, text="🎯 AI Recommendations", padding="15")
@@ -315,6 +323,9 @@ class SimplePLYProcessor:
             self.populate_parts_from_voxels()
             self.log_message("Parts ready: Select and click 'Run AI on Selected Parts' to continue.")
             
+            # Enable the "Open Voxel Output Folder" button
+            self.root.after(0, lambda: self.open_voxel_folder_btn.config(state='normal'))
+            
         except Exception as e:
             self.log_message(f"Error: {str(e)}")
             self.show_error_results()
@@ -441,6 +452,40 @@ except Exception as e:
             cb.pack(anchor='w', pady=2)
             self.part_vars[p] = var
         self.run_selected_btn.config(state=('normal' if parts else 'disabled'))
+    
+    def open_voxel_output_folder(self):
+        """Open the voxel output folder in file explorer"""
+        try:
+            if not self.selected_file:
+                messagebox.showwarning("No File", "Please select a PLY file first")
+                return
+            
+            # Get model ID from selected file
+            model_id = os.path.basename(self.selected_file).replace('.ply', '')
+            voxel_out_path = os.path.join('voxel_out', model_id)
+            
+            # Check if directory exists
+            if not os.path.exists(voxel_out_path):
+                messagebox.showwarning("Folder Not Found", 
+                                     f"Voxel output folder not found:\n{voxel_out_path}\n\nPlease run voxelization first.")
+                return
+            
+            # Open folder in file explorer (cross-platform)
+            if sys.platform == 'win32':
+                # Windows
+                os.startfile(voxel_out_path)
+            elif sys.platform == 'darwin':
+                # macOS
+                subprocess.run(['open', voxel_out_path])
+            else:
+                # Linux
+                subprocess.run(['xdg-open', voxel_out_path])
+            
+            self.log_message(f"Opened voxel output folder: {voxel_out_path}")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open folder:\n{str(e)}")
+            self.log_message(f"Error opening folder: {str(e)}")
 
     def run_selected_recommendations(self):
         """Run recommend_thinning_final.py only for selected parts (stylish, safe)."""
