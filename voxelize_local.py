@@ -3,6 +3,7 @@
 Local PLY to Voxel Pipeline
 Adapted from the working Colab code
 Processes multiple PLY files from input/ folder and creates separate output folders
+I used trimesh instead of open3d because it was easier to use and it was faster.
 """
 
 import trimesh
@@ -57,13 +58,17 @@ def process_single_ply(ply_path, output_base_dir="voxel_out", target_res=64):
     os.makedirs(out_dir, exist_ok=True)
     
     # Save as box-meshes (handy for quick preview in any mesh viewer)
-    vox_mesh_surface = vg_surface.as_boxes()
+    
     vox_mesh_filled  = vg_filled.as_boxes()
-    surf_ply  = os.path.join(out_dir, "vox_surface_boxes.ply")
     fill_ply  = os.path.join(out_dir, "vox_filled_boxes.ply")
-    vox_mesh_surface.export(surf_ply)
     vox_mesh_filled.export(fill_ply)
+
+    # vox_mesh_surface = vg_surface.as_boxes()                    # Commented out - only surface as boxes not really needed
+    # surf_ply  = os.path.join(out_dir, "vox_surface_boxes.ply")  # Commented out - not needed
+    # vox_mesh_surface.export(surf_ply)                           # Commented out - not needed for pipeline
     # print("saved:", surf_ply, "and", fill_ply)
+    
+    
     
     # Save sparse occupancy with metadata
     np.savez_compressed(

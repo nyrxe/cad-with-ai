@@ -281,3 +281,4 @@ python -c "import numpy as np; import os; data=np.load('voxel_out/{your_model}/v
 
 **CalculiX 2.22 is fine - the crash is from something else!** 🎯
 
+

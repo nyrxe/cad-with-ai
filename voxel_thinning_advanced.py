@@ -2,6 +2,7 @@
 """
 Advanced Voxel Thinning Tool
 Comprehensive erosion with interface protection, connectivity checks, and stress-aware mode.
+Its used in ai training and not in the pipeline.
 """
 
 import numpy as np
@@ -171,7 +172,7 @@ class VoxelThinner:
         for layer in range(self.erosion_layers):
             # Compute core and boundary
             core = binary_erosion(eroded_grid, structure=self.structuring_element)
-            boundary = eroded_grid & ~core
+            boundary = eroded_grid & ~core # boundary voxels are the voxels that are on the surface
             
             # Only check thickness on boundary voxels
             safe_to_remove = np.zeros_like(boundary, dtype=bool)
