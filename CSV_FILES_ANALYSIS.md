@@ -12,7 +12,7 @@ This document analyzes all CSV files in the project and determines which ones ar
 
 ## ✅ **ESSENTIAL / USEFUL CSV Files**
 
-### 1. **`original_parts.csv`** ⭐⭐⭐
+### 1. **`original_parts.csv`** 
 **Status:** **ESSENTIAL - Core Data File**
 
 **Purpose:**
@@ -30,7 +30,7 @@ This document analyzes all CSV files in the project and determines which ones ar
 
 ---
 
-### 2. **`thinning_recommendations_final.csv`** ⭐⭐⭐
+### 2. **`thinning_recommendations_final.csv`** 
 **Status:** **ESSENTIAL - AI Output**
 
 **Purpose:**
@@ -48,7 +48,7 @@ This document analyzes all CSV files in the project and determines which ones ar
 
 ---
 
-### 3. **`dataset_with_mass_volume.csv`** ⭐⭐
+### 3. **`dataset_with_mass_volume.csv`** 
 **Status:** **USEFUL - Intermediate Data**
 
 **Purpose:**
@@ -66,7 +66,7 @@ This document analyzes all CSV files in the project and determines which ones ar
 
 ---
 
-### 4. **`pairwise_finite.csv`** ⭐⭐
+### 4. **`pairwise_finite.csv`** 
 **Status:** **USEFUL - ML Training Data**
 
 **Purpose:**
@@ -84,7 +84,7 @@ This document analyzes all CSV files in the project and determines which ones ar
 
 ---
 
-### 5. **`pairwise_eda_clipped.csv`** ⭐
+### 5. **`pairwise_eda_clipped.csv`** 
 **Status:** **OPTIONAL - Analysis/Visualization**
 
 **Purpose:**
@@ -102,7 +102,7 @@ This document analyzes all CSV files in the project and determines which ones ar
 
 ## 📋 **REPORT CSV Files (Generated After Thinning)**
 
-### 6. **`voxel_thinning_apply_report.csv`** ⭐⭐
+### 6. **`voxel_thinning_apply_report.csv`** 
 **Status:** **USEFUL - Thinning Results**
 
 **Purpose:**
@@ -120,7 +120,7 @@ This document analyzes all CSV files in the project and determines which ones ar
 
 ---
 
-### 7. **`thinning_apply_report.csv`** ⭐
+### 7. **`thinning_apply_report.csv`** 
 **Status:** **OPTIONAL - Legacy Report**
 
 **Purpose:**
@@ -137,7 +137,7 @@ This document analyzes all CSV files in the project and determines which ones ar
 
 ---
 
-### 8. **`surface_offset_thinning_report.csv`** ⭐
+### 8. **`surface_offset_thinning_report.csv`** 
 **Status:** **OPTIONAL - Unused**
 
 **Purpose:**
@@ -156,7 +156,7 @@ This document analyzes all CSV files in the project and determines which ones ar
 
 ## 🔄 **BACKUP CSV Files**
 
-### 9. **`original_parts.backup.csv`** ⭐
+### 9. **`original_parts.backup.csv`** 
 **Status:** **BACKUP - Safety Copy**
 
 **Purpose:**
@@ -176,15 +176,15 @@ This document analyzes all CSV files in the project and determines which ones ar
 
 | CSV File | Status | Keep? | Regeneratable? | Used By |
 |----------|--------|-------|----------------|---------|
-| `original_parts.csv` | ⭐⭐⭐ Essential | ✅ YES | ❌ No (requires pipeline) | AI recommendations, Frontend |
-| `thinning_recommendations_final.csv` | ⭐⭐⭐ Essential | ✅ YES | ❌ No (requires ML models) | Frontend, Thinning scripts |
-| `dataset_with_mass_volume.csv` | ⭐⭐ Useful | ✅ YES | ✅ Yes (from FEA) | Pairwise building, Analysis |
-| `pairwise_finite.csv` | ⭐⭐ Useful | ✅ YES | ✅ Yes (from dataset) | ML training |
-| `pairwise_eda_clipped.csv` | ⭐ Optional | ⚠️ Optional | ✅ Yes | Analysis only |
-| `voxel_thinning_apply_report.csv` | ⭐⭐ Useful | ✅ YES | ✅ Yes (from thinning) | Frontend display |
-| `thinning_apply_report.csv` | ⭐ Legacy | ⚠️ Optional | ✅ Yes | None (commented out) |
-| `surface_offset_thinning_report.csv` | ⭐ Unused | ⚠️ Optional | ✅ Yes | None (commented out) |
-| `original_parts.backup.csv` | ⭐ Backup | ✅ YES | ✅ Yes (auto-generated) | Frontend restore |
+| `original_parts.csv` |  Essential | ✅ YES | ❌ No (requires pipeline) | AI recommendations, Frontend |
+| `thinning_recommendations_final.csv` |  Essential | ✅ YES | ❌ No (requires ML models) | Frontend, Thinning scripts |
+| `dataset_with_mass_volume.csv` |  Useful | ✅ YES | ✅ Yes (from FEA) | Pairwise building, Analysis |
+| `pairwise_finite.csv` |  Useful | ✅ YES | ✅ Yes (from dataset) | ML training |
+| `pairwise_eda_clipped.csv` |  Optional | ⚠️ Optional | ✅ Yes | Analysis only |
+| `voxel_thinning_apply_report.csv` |  Useful | ✅ YES | ✅ Yes (from thinning) | Frontend display |
+| `thinning_apply_report.csv` |  Legacy | ⚠️ Optional | ✅ Yes | None (commented out) |
+| `surface_offset_thinning_report.csv` |  Unused | ⚠️ Optional | ✅ Yes | None (commented out) |
+| `original_parts.backup.csv` |  Backup | ✅ YES | ✅ Yes (auto-generated) | Frontend restore |
 
 ---
 
