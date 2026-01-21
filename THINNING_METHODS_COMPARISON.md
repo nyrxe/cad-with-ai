@@ -20,7 +20,7 @@ Both scripts perform voxel thinning (material reduction), but use **completely d
 
 ---
 
-## 🎯 `voxel_sdf_thinning.py` - AI-Driven Thinning
+##  `voxel_sdf_thinning.py` - AI-Driven Thinning
 
 ### **Purpose:**
 Applies **AI-recommended thinning percentages** to voxel models using SDF (Signed Distance Field) based layer removal.
