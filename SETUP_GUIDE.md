@@ -1,12 +1,12 @@
 # Setup Guide - CAD with AI Frontend
 
-## 📋 Prerequisites
+##  Prerequisites
 
 Before running the frontend, you need to set up the Python environment and install dependencies.
 
 ---
 
-## 🚀 Step-by-Step Setup
+##  Step-by-Step Setup
 
 ### **Step 1: Create Virtual Environment**
 
@@ -105,7 +105,7 @@ python simple_ply_processor.py
 
 ---
 
-## 🐛 Troubleshooting
+##  Troubleshooting
 
 ### **Issue: "No module named 'numpy'"**
 
@@ -137,7 +137,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 ---
 
-## 📝 Complete Setup Commands (Copy-Paste Ready)
+##  Complete Setup Commands (Copy-Paste Ready)
 
 **Windows PowerShell**:
 ```powershell
@@ -182,7 +182,7 @@ python simple_ply_processor.py
 
 ---
 
-## ✅ Verification Steps
+##  Verification Steps
 
 After setup, the frontend should:
 
@@ -214,7 +214,7 @@ pip install -r requirements.txt --force-reinstall
 
 ---
 
-## 📚 Additional Notes
+##  Additional Notes
 
 - **Virtual environment is optional but recommended** - Keeps dependencies isolated
 - **Frontend auto-detects venv** - Will use `.venv\Scripts\python.exe` if it exists
@@ -223,7 +223,7 @@ pip install -r requirements.txt --force-reinstall
 
 ---
 
-## 🎯 Next Steps
+##  Next Steps
 
 Once setup is complete:
 
