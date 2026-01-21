@@ -878,3 +878,35 @@ To understand these concepts better:
 
 This explanation covers the core functionality of each component. Each function is designed to be modular and can be understood independently, but they work together to create a complete AI-driven thickness optimization system.
 
+### **Option 1: "Apply AI thinning to voxels (SDF offset)"** ✅ (Default: ON)
+
+**What it does:**
+- Removes entire **voxel layers** from the surface inward
+- Uses **SDF (Signed Distance Field)** to calculate distances from the surface
+- Removes voxels layer by layer until reaching the target reduction percentage
+- Preserves the overall shape while reducing thickness
+
+**How it works:**
+1. Calculates distance from each voxel to the surface
+2. Starts removing from the outermost layer (distance = 1)
+3. Works inward layer by layer
+4. Stops when target reduction is reached or safety limits hit
+
+**Example:**
+```
+Original: 1000 voxels
+AI recommends: 15% reduction
+Target: Remove 150 voxels
+
+Process:
+- Remove layer 1 (surface): 50 voxels removed
+- Remove layer 2: 40 voxels removed  
+- Remove layer 3: 35 voxels removed
+- Remove layer 4: 25 voxels removed
+Total: 150 voxels removed ✅
+```
+
+**Output:**
+- Creates `voxels_filled_indices_colors_thinned.npz` file
+- Exports modified PLY files with reduced material
+- Shows achieved reduction vs target in results

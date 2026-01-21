@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.linear_model import LinearRegression, Ridge
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import train_test_split, cross_val_score, LeaveOneOut
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 import joblib
@@ -107,8 +107,19 @@ class EnhancedThicknessOptimizer:
         """Train multiple ML models"""
         print("\n=== TRAINING MODELS ===")
         
-        # Split data
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        # Split data - adjust test size for small datasets
+        n_samples = len(X)
+        if n_samples < 5:
+            # For very small datasets, use a smaller test set or skip split
+            test_size = max(0.2, 1.0 / n_samples) if n_samples > 2 else 0.0
+            if test_size == 0.0:
+                # Use all data for training if too small
+                X_train, X_test, y_train, y_test = X, X, y, y
+                print(f"  Warning: Dataset too small ({n_samples} samples), using all data for training")
+            else:
+                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
+        else:
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
         
         # Scale features
         scaler = StandardScaler()
@@ -117,18 +128,22 @@ class EnhancedThicknessOptimizer:
         
         self.scalers['main'] = scaler
         
-        # Define models
+        print(f"  Training samples: {len(X_train)}, Test samples: {len(X_test)}")
+        
+        # Define models - adjust parameters for small datasets
+        min_samples = min(2, len(X_train))  # Adjust for small datasets
+        
         models = {
             'RandomForest': RandomForestRegressor(
-                n_estimators=100, 
-                max_depth=10, 
-                min_samples_split=5,
+                n_estimators=50 if len(X_train) < 10 else 100, 
+                max_depth=5 if len(X_train) < 10 else 10, 
+                min_samples_split=min_samples,
                 random_state=42
             ),
             'GradientBoosting': GradientBoostingRegressor(
-                n_estimators=100, 
+                n_estimators=50 if len(X_train) < 10 else 100, 
                 learning_rate=0.1, 
-                max_depth=6,
+                max_depth=3 if len(X_train) < 10 else 6,
                 random_state=42
             ),
             'Ridge': Ridge(alpha=1.0),
@@ -155,8 +170,23 @@ class EnhancedThicknessOptimizer:
             train_mae = mean_absolute_error(y_train, y_train_pred)
             test_mae = mean_absolute_error(y_test, y_test_pred)
             
-            # Cross-validation
-            cv_scores = cross_val_score(model, X_train_scaled, y_train, cv=5, scoring='r2')
+            # Cross-validation - adjust folds for small datasets
+            n_train_samples = len(X_train)
+            if n_train_samples < 5:
+                # Use Leave-One-Out CV for very small datasets
+                cv = LeaveOneOut() if n_train_samples > 1 else None
+                if cv is None:
+                    cv_scores = np.array([np.nan])
+                    print(f"  Warning: Too few samples ({n_train_samples}) for cross-validation")
+                else:
+                    cv_scores = cross_val_score(model, X_train_scaled, y_train, cv=cv, scoring='r2')
+            else:
+                # Use min(5, n_samples) folds
+                n_folds = min(5, n_train_samples)
+                cv_scores = cross_val_score(model, X_train_scaled, y_train, cv=n_folds, scoring='r2')
+            
+            cv_mean = cv_scores.mean() if not np.isnan(cv_scores).all() else np.nan
+            cv_std = cv_scores.std() if not np.isnan(cv_scores).all() else np.nan
             
             results[name] = {
                 'model': model,
@@ -166,8 +196,8 @@ class EnhancedThicknessOptimizer:
                 'test_rmse': test_rmse,
                 'train_mae': train_mae,
                 'test_mae': test_mae,
-                'cv_mean': cv_scores.mean(),
-                'cv_std': cv_scores.std()
+                'cv_mean': cv_mean,
+                'cv_std': cv_std
             }
             
             print(f"  Train R²: {train_r2:.3f}")
@@ -176,7 +206,10 @@ class EnhancedThicknessOptimizer:
             print(f"  Test RMSE: {test_rmse:.3f}")
             print(f"  Train MAE: {train_mae:.3f}")
             print(f"  Test MAE: {test_mae:.3f}")
-            print(f"  CV R²: {cv_scores.mean():.3f} ± {cv_scores.std():.3f}")
+            if not np.isnan(cv_scores).all():
+                print(f"  CV R²: {cv_scores.mean():.3f} ± {cv_scores.std():.3f}")
+            else:
+                print(f"  CV R²: N/A (insufficient data)")
             
             # Feature importance (if available)
             if hasattr(model, 'feature_importances_'):
@@ -204,40 +237,47 @@ class EnhancedThicknessOptimizer:
         fig, axes = plt.subplots(2, 3, figsize=(20, 12))
         fig.suptitle('Enhanced Thickness Optimization Analysis', fontsize=16)
         
-        # 1. Element reduction vs P95 stress change
-        axes[0, 0].scatter(df['elem_reduction_pct'], df['delta_p95_pct'], alpha=0.6, s=20)
+        # 1. Element reduction vs P95 stress change (filtered 0-20%)
+        elem_filtered = df[(df['elem_reduction_pct'] >= 0) & (df['elem_reduction_pct'] <= 20)]
+        axes[0, 0].scatter(elem_filtered['elem_reduction_pct'], elem_filtered['delta_p95_pct'], alpha=0.6, s=20)
         axes[0, 0].set_xlabel('Element Reduction (%)')
         axes[0, 0].set_ylabel('P95 Stress Change (%)')
-        axes[0, 0].set_title('Element Reduction vs P95 Stress Change')
+        axes[0, 0].set_title('Element Reduction vs P95 Stress Change (0-20%)')
+        axes[0, 0].set_xlim(0, 20)
         axes[0, 0].grid(True, alpha=0.3)
         
         # Add trend line
         try:
-            z = np.polyfit(df['elem_reduction_pct'], df['delta_p95_pct'], 1)
-            p = np.poly1d(z)
-            x_trend = np.linspace(df['elem_reduction_pct'].min(), df['elem_reduction_pct'].max(), 100)
-            axes[0, 0].plot(x_trend, p(x_trend), "r--", alpha=0.8, linewidth=2)
+            if len(elem_filtered) > 1:
+                z = np.polyfit(elem_filtered['elem_reduction_pct'], elem_filtered['delta_p95_pct'], 1)
+                p = np.poly1d(z)
+                x_trend = np.linspace(0, 20, 100)
+                axes[0, 0].plot(x_trend, p(x_trend), "r--", alpha=0.8, linewidth=2)
         except:
             print("  Warning: Could not fit trend line for element reduction")
         
-        # 2. Mass reduction vs stress change (if available)
+        # 2. Mass reduction vs stress change (if available, filtered 0-20%)
         if 'mass_reduction_pct' in df.columns:
-            axes[0, 1].scatter(df['mass_reduction_pct'], df['delta_p95_pct'], alpha=0.6, s=20)
+            mass_filtered = df[(df['mass_reduction_pct'] >= 0) & (df['mass_reduction_pct'] <= 20)]
+            axes[0, 1].scatter(mass_filtered['mass_reduction_pct'], mass_filtered['delta_p95_pct'], alpha=0.6, s=20)
             axes[0, 1].set_xlabel('Mass Reduction (%)')
             axes[0, 1].set_ylabel('P95 Stress Change (%)')
-            axes[0, 1].set_title('Mass Reduction vs P95 Stress Change')
+            axes[0, 1].set_title('Mass Reduction vs P95 Stress Change (0-20%)')
+            axes[0, 1].set_xlim(0, 20)
             axes[0, 1].grid(True, alpha=0.3)
         else:
             axes[0, 1].text(0.5, 0.5, 'Mass data\nnot available', ha='center', va='center', 
                            transform=axes[0, 1].transAxes)
             axes[0, 1].set_title('Mass Reduction vs P95 Stress Change')
         
-        # 3. Volume reduction vs stress change (if available)
+        # 3. Volume reduction vs stress change (if available, filtered 0-20%)
         if 'volume_reduction_pct' in df.columns:
-            axes[0, 2].scatter(df['volume_reduction_pct'], df['delta_p95_pct'], alpha=0.6, s=20)
+            volume_filtered = df[(df['volume_reduction_pct'] >= 0) & (df['volume_reduction_pct'] <= 20)]
+            axes[0, 2].scatter(volume_filtered['volume_reduction_pct'], volume_filtered['delta_p95_pct'], alpha=0.6, s=20)
             axes[0, 2].set_xlabel('Volume Reduction (%)')
             axes[0, 2].set_ylabel('P95 Stress Change (%)')
-            axes[0, 2].set_title('Volume Reduction vs P95 Stress Change')
+            axes[0, 2].set_title('Volume Reduction vs P95 Stress Change (0-20%)')
+            axes[0, 2].set_xlim(0, 20)
             axes[0, 2].grid(True, alpha=0.3)
         else:
             axes[0, 2].text(0.5, 0.5, 'Volume data\nnot available', ha='center', va='center', 
